@@ -1,5 +1,5 @@
 import pytest
-from utils import clean_text, chunk_text, rank_chunks, tokenize
+from app.text_processing import clean_text, chunk_text, rank_chunks, tokenize
 
 def test_clean_text():
     raw_text = "This   is \r some \n\n\n\n text."

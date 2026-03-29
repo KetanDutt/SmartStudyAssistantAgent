@@ -1,133 +1,17 @@
-import json
-import os
-import re
-from functools import lru_cache
 from typing import Any, Dict, List
-
-from dotenv import load_dotenv
-from pypdf import PdfReader
-import google.generativeai as genai
-
-load_dotenv()
-
-API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
-
-MAX_CONTEXT_WORDS_QA = 2600
-MAX_CONTEXT_WORDS_SUMMARY = 3000
-MAX_CONTEXT_WORDS_QUIZ = 2000
-DEFAULT_TEMPERATURE = 0.2
-QUIZ_TEMPERATURE = 0.3
-
-if API_KEY:
-    genai.configure(api_key=API_KEY)
-
-STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "been", "but", "by", "can",
-    "could", "did", "do", "does", "doing", "for", "from", "had", "has", "have",
-    "he", "her", "hers", "him", "his", "how", "i", "if", "in", "into", "is",
-    "it", "its", "just", "me", "more", "most", "my", "no", "not", "of", "on",
-    "or", "our", "out", "over", "she", "so", "some", "than", "that", "the",
-    "their", "them", "then", "there", "these", "they", "this", "to", "too",
-    "us", "was", "we", "were", "what", "when", "where", "which", "who",
-    "why", "with", "would", "you", "your"
-}
+from app.config import (
+    DEFAULT_MODEL,
+    MAX_CONTEXT_WORDS_QA,
+    MAX_CONTEXT_WORDS_SUMMARY,
+    MAX_CONTEXT_WORDS_QUIZ,
+    DEFAULT_TEMPERATURE,
+    QUIZ_TEMPERATURE,
+)
+from app.text_processing import get_chunks, rank_chunks
+from app.gemini_utils import _generate, _extract_json
 
 
-def require_api_key() -> None:
-    if not API_KEY:
-        raise RuntimeError(
-            "Missing GOOGLE_API_KEY. Add it to your .env file or set it as an environment variable."
-        )
-
-
-def validate_api_key() -> bool:
-    try:
-        require_api_key()
-        return True
-    except RuntimeError:
-        return False
-
-
-@lru_cache(maxsize=4)
-def get_model(model_name: str = DEFAULT_MODEL):
-    require_api_key()
-    return genai.GenerativeModel(model_name)
-
-
-def extract_text_from_pdf(uploaded_file) -> str:
-    reader = PdfReader(uploaded_file)
-    pages = []
-    for page in reader.pages:
-        text = page.extract_text() or ""
-        pages.append(text)
-    return clean_text("\n".join(pages))
-
-
-def clean_text(text: str) -> str:
-    text = re.sub(r"\r", "\n", text)
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
-
-
-import hashlib
-
-
-@lru_cache(maxsize=4)
-def chunk_text_cached(text_hash: str, text: str, max_words: int = 900) -> List[str]:
-    words = text.split()
-    if not words:
-        return []
-    chunks = []
-    for start in range(0, len(words), max_words):
-        chunk = " ".join(words[start:start + max_words]).strip()
-        if chunk:
-            chunks.append(chunk)
-    return chunks
-
-
-def chunk_text(text: str, max_words: int = 900) -> List[str]:
-    """Helper for chunking to avoid changing existing calls."""
-    return get_chunks(text, max_words)
-
-
-def get_chunks(text: str, max_words: int = 900) -> List[str]:
-    text_hash = hashlib.md5(text.encode()).hexdigest()
-    return chunk_text_cached(text_hash, text, max_words)
-
-
-def tokenize(text: str) -> List[str]:
-    return [w.lower() for w in re.findall(r"[A-Za-z0-9]+", text) if w.lower() not in STOPWORDS]
-
-
-def rank_chunks(query: str, chunks: List[str], top_k: int = 4) -> List[str]:
-    """Return the top_k chunks most relevant to the query using keyword overlap."""
-    if not chunks:
-        return []
-
-    query_tokens = set(tokenize(query))
-    if not query_tokens:
-        return chunks[:top_k]
-
-    scored = []
-    for chunk in chunks:
-        tokens = tokenize(chunk)
-        if not tokens:
-            score = 0
-        else:
-            overlap = len(query_tokens.intersection(tokens))
-            score = overlap / max(1, len(query_tokens))
-        scored.append((score, chunk))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    selected = [chunk for score, chunk in scored[:top_k] if score > 0]
-    if not selected:
-        selected = chunks[:top_k]
-    return selected
-
-
-def select_context_for_question(text: str, question: str, max_words: int = 2600) -> str:
+def select_context_for_question(text: str, question: str, max_words: int = MAX_CONTEXT_WORDS_QA) -> str:
     chunks = get_chunks(text)
     selected = rank_chunks(question, chunks, top_k=5)
     if not selected:
@@ -155,62 +39,6 @@ def select_context_for_generation(text: str, max_words: int = 3200) -> str:
         chosen.append(chunks[-2])
     context = "\n\n".join(chosen)
     return " ".join(context.split()[:max_words])
-
-
-def split_notes_for_display(text: str, max_chars: int = 3500) -> str:
-    text = clean_text(text)
-    return text[:max_chars] + ("\n\n..." if len(text) > max_chars else "")
-
-
-def _extract_json(text: str) -> Any:
-    text = text.strip()
-    fenced = re.search(r"```(?:json)?\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
-    if fenced:
-        text = fenced.group(1).strip()
-
-    first_obj = text.find("{")
-    last_obj = text.rfind("}")
-    first_arr = text.find("[")
-    last_arr = text.rfind("]")
-
-    candidates = []
-    if first_obj != -1 and last_obj != -1 and last_obj > first_obj:
-        candidates.append(text[first_obj:last_obj + 1])
-    if first_arr != -1 and last_arr != -1 and last_arr > first_arr:
-        candidates.append(text[first_arr:last_arr + 1])
-
-    for candidate in candidates:
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-    raise ValueError("Model did not return valid JSON.")
-
-
-def _generate(model_name: str, prompt: str, temperature: float = DEFAULT_TEMPERATURE) -> str:
-    model = get_model(model_name)
-    response = model.generate_content(
-        prompt,
-        generation_config={
-            "temperature": temperature,
-            "max_output_tokens": 2048,
-        },
-    )
-
-    if response.prompt_feedback and response.prompt_feedback.block_reason:
-        raise RuntimeError(f"Prompt blocked: {response.prompt_feedback.block_reason}")
-
-    if not response.candidates:
-        raise RuntimeError("No response candidates returned by Gemini.")
-
-    candidate = response.candidates[0]
-    if candidate.finish_reason != 1:  # 1 = STOP
-        raise RuntimeError(f"Generation stopped due to: {candidate.finish_reason}")
-
-    text = candidate.content.parts[0].text if candidate.content.parts else ""
-    if not text:
-        raise RuntimeError("Gemini returned an empty response.")
-    return text.strip()
 
 
 def answer_question(context: str, question: str, model_name: str = DEFAULT_MODEL) -> str:

@@ -1,16 +1,15 @@
 import os
 from datetime import datetime
-
 import streamlit as st
 
-from utils import (
-    extract_text_from_pdf,
+from app.config import validate_api_key
+from app.pdf_utils import extract_text_from_pdf
+from app.text_processing import split_notes_for_display
+from app.features import (
     answer_question,
     generate_quiz,
     generate_revision_notes,
     summarize_notes,
-    split_notes_for_display,
-    validate_api_key,
     generate_flashcards,
 )
 
@@ -68,7 +67,6 @@ def ensure_state():
         if key not in st.session_state:
             st.session_state[key] = value
 
-
 ensure_state()
 
 if not validate_api_key():
@@ -97,9 +95,10 @@ with st.sidebar:
         height=220,
         placeholder="Paste your notes here if you do not have a PDF...",
     )
-    model_name = st.text_input("Model name", value=os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash"))
+    model_name = st.text_input("Model name", value=os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash"))
     quiz_count = st.slider("Quiz questions", 3, 10, 5)
     exam_count = st.slider("Exam questions", 5, 15, 8)
+    retrieval_method = st.selectbox("Retrieval method", ["Keyword overlap", "Embedding (experimental)"])
     st.divider()
     st.caption("Tip: keep the notes concise for faster generation.")
 
