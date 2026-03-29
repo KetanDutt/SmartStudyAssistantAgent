@@ -7,12 +7,15 @@ def test_validate_api_key_when_present(monkeypatch):
     app.config._api_key_valid = None
 
     # Mock the API call since the key is fake
-    import google.generativeai as genai
-    class MockModel:
-        def generate_content(self, text):
+    import google.genai as genai
+    class MockModels:
+        def generate_content(self, model, contents):
             return True
+    class MockClient:
+        def __init__(self, api_key=None):
+            self.models = MockModels()
 
-    monkeypatch.setattr(genai, "GenerativeModel", lambda *args, **kwargs: MockModel())
+    monkeypatch.setattr(genai, "Client", MockClient)
     assert validate_api_key() is True
 
 def test_validate_api_key_when_missing(monkeypatch):
