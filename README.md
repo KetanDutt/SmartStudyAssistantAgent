@@ -33,7 +33,7 @@ Create a `.env` file in the project root:
 
 ```env
 GOOGLE_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL_NAME=gemini-1.5-flash
+GEMINI_MODEL_NAME=gemini-2.0-flash
 ```
 
 Run the app:
@@ -50,7 +50,7 @@ Build and deploy from the project folder:
 gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
 
-gcloud run deploy study-agent   --source .   --region us-central1   --allow-unauthenticated   --set-env-vars GOOGLE_API_KEY=YOUR_GEMINI_API_KEY,GEMINI_MODEL_NAME=gemini-1.5-flash
+gcloud run deploy study-agent   --source .   --region us-central1   --allow-unauthenticated   --set-env-vars GOOGLE_API_KEY=YOUR_GEMINI_API_KEY,GEMINI_MODEL_NAME=gemini-2.0-flash
 ```
 
 ## Notes
