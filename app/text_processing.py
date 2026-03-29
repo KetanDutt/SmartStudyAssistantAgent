@@ -40,6 +40,7 @@ def get_chunks(text: str, max_words: int = 900) -> List[str]:
     text_hash = hashlib.md5(text.encode()).hexdigest()
     return chunk_text_cached(text_hash, text, max_words)
 
+@lru_cache(maxsize=128)
 def tokenize(text: str) -> List[str]:
     return [w.lower() for w in re.findall(r"[A-Za-z0-9]+", text) if w.lower() not in STOPWORDS]
 

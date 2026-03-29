@@ -18,9 +18,23 @@ def require_api_key() -> None:
             "Missing GOOGLE_API_KEY. Add it to your .env file or set it as an environment variable."
         )
 
+_api_key_valid = None
+
 def validate_api_key() -> bool:
+    global _api_key_valid
+    if _api_key_valid is not None:
+        return _api_key_valid
+
+    if not API_KEY:
+        _api_key_valid = False
+        return False
     try:
-        require_api_key()
+        import google.generativeai as genai
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel(DEFAULT_MODEL)
+        model.generate_content("test")
+        _api_key_valid = True
         return True
-    except RuntimeError:
+    except Exception:
+        _api_key_valid = False
         return False

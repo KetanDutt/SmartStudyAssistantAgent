@@ -1,15 +1,16 @@
 import json
 import re
-from functools import lru_cache
 from typing import Any
+import streamlit as st
 import google.generativeai as genai
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import API_KEY, DEFAULT_MODEL, DEFAULT_TEMPERATURE, require_api_key
 
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
-@lru_cache(maxsize=4)
+@st.cache_resource
 def get_model(model_name: str = DEFAULT_MODEL):
     require_api_key()
     return genai.GenerativeModel(model_name)
@@ -38,6 +39,7 @@ def _extract_json(text: str) -> Any:
             continue
     raise ValueError("Model did not return valid JSON.")
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def _generate(model_name: str, prompt: str, temperature: float = DEFAULT_TEMPERATURE) -> str:
     model = get_model(model_name)
     response = model.generate_content(

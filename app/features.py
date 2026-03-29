@@ -31,12 +31,16 @@ def select_context_for_generation(text: str, max_words: int = 3200) -> str:
     if len(text.split()) <= max_words:
         return text
 
-    # Use a mix of the first chunks and a few spread across the content to keep coverage.
-    chosen = chunks[:2]
-    if len(chunks) > 4:
-        chosen.append(chunks[len(chunks) // 2])
-    if len(chunks) > 6:
-        chosen.append(chunks[-2])
+    # Use rank_chunks with a dummy query to pick out relevant important concepts
+    # rather than just using the first/middle/last chunks
+    dummy_query = "important concepts key ideas main points summary"
+
+    # Calculate how many chunks to fetch based on max_words
+    words_per_chunk = 900 # default from chunk_text
+    top_k = max(2, (max_words // words_per_chunk) + 1)
+
+    chosen = rank_chunks(dummy_query, chunks, top_k=top_k)
+
     context = "\n\n".join(chosen)
     return " ".join(context.split()[:max_words])
 
@@ -98,6 +102,7 @@ Requirements:
   * Key terms in **bold**
 * Use bullet points
 * Keep it concise and revision-friendly
+* Highlight any weak topics or related concepts in red using standard markdown or HTML `<span style="color:red"></span>`
 
 Notes:
 {selected_context}
@@ -154,20 +159,19 @@ Rules:
 Notes:
 {selected_context}
 """
-    max_retries = 2
+    max_retries = 3
     for attempt in range(max_retries):
         try:
             raw = _generate(model_name, prompt, temperature=QUIZ_TEMPERATURE)
             data = _extract_json(raw)
             break
-        except ValueError:
+        except ValueError as e:
             if attempt == max_retries - 1:
-                raise
-            prompt += "\n\nReturn ONLY valid JSON, no extra text."
+                raise e
+            prompt += f"\n\nERROR parsing JSON: {e}\nPlease Return ONLY valid JSON, no extra text or markdown formatting."
 
     items = data.get("items", []) if isinstance(data, dict) else []
     normalized = []
-    import random
     for idx, item in enumerate(items[:num_questions], start=1):
         options = item.get("options", [])
         if not isinstance(options, list) or len(options) != 4:
@@ -181,24 +185,14 @@ Notes:
             answer_index = 0
 
         clean_options = [str(opt).strip() for opt in options[:4]]
-        # Randomize options
-        indexed_options = list(enumerate(clean_options))
-        random.shuffle(indexed_options)
-
-        shuffled_options = []
-        new_answer_index = 0
-        for new_idx, (original_idx, opt) in enumerate(indexed_options):
-            shuffled_options.append(opt)
-            if original_idx == answer_index:
-                new_answer_index = new_idx
 
         normalized.append(
             {
                 "id": item.get("id", idx),
                 "topic": str(item.get("topic", "General")).strip() or "General",
                 "question": str(item.get("question", "")).strip(),
-                "options": shuffled_options,
-                "answer_index": new_answer_index,
+                "options": clean_options,
+                "answer_index": answer_index,
                 "explanation": str(item.get("explanation", "")).strip(),
             }
         )
@@ -309,6 +303,7 @@ Use the study notes below to produce:
 - one short revision checklist
 
 Keep it beginner-friendly and concise.
+Highlight any weak topics or related concepts in red using HTML `<span style="color:red"></span>`.
 
 Notes:
 {selected_context}
