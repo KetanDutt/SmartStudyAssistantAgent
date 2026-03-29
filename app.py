@@ -25,6 +25,10 @@ st.markdown(
     """
     <style>
     .block-container {padding-top: 1.2rem; padding-bottom: 2rem;}
+    @media (max-width: 768px) {
+        .block-container {padding-top: 0.5rem; padding-left: 0.5rem; padding-right: 0.5rem;}
+        div[data-baseweb="tab-list"] { overflow-x: auto; flex-wrap: nowrap; }
+    }
     .hero {
         padding: 1.25rem 1.4rem;
         border-radius: 22px;
@@ -71,53 +75,15 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-import json
-
-DATA_FILE = "user_data.json"
-
-def load_user_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-def save_user_data(data):
-    try:
-        with open(DATA_FILE, "w") as f:
-            json.dump(data, f)
-    except Exception:
-        pass
-
-def ensure_state():
-    user_data = load_user_data()
-    defaults = {
-        "context_text": "",
-        "source_name": "",
-        "quiz_items": [],
-        "exam_items": [],
-        "weak_topics": user_data.get("weak_topics", []),
-        "quiz_result": user_data.get("quiz_result", None),
-        "exam_result": user_data.get("exam_result", None),
-        "summary_text": "",
-        "revision_text": "",
-        "revision_plan": "",
-    }
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+from app.handlers import (
+    ensure_state,
+    update_user_data,
+    record_weak_topics,
+    shuffle_quiz_items,
+    add_score,
+)
 
 ensure_state()
-
-def update_user_data():
-    data = {
-        "weak_topics": st.session_state.weak_topics,
-        "quiz_result": st.session_state.quiz_result,
-        "exam_result": st.session_state.exam_result,
-    }
-    save_user_data(data)
 
 if not validate_api_key():
     st.error("🚨 Google API key is missing or invalid. Please add a valid `GOOGLE_API_KEY` to your `.env` file.")
@@ -152,6 +118,28 @@ with st.sidebar:
     beginner_mode = st.toggle("Explain Like I'm 10 Mode", value=False, help="Simplify explanations and examples")
     st.divider()
     st.caption("Tip: keep the notes concise for faster generation.")
+
+    st.divider()
+    st.header("Study Tools")
+    if st.button("🗑️ Clear all weak topics"):
+        st.session_state.weak_topics = []
+        update_user_data()
+        st.rerun()
+
+    import json
+    export_data = {
+        "weak_topics": st.session_state.get("weak_topics", []),
+        "score_history": st.session_state.get("score_history", []),
+        "summary": st.session_state.get("summary_text", ""),
+        "revision_plan": st.session_state.get("revision_plan", ""),
+        "revision_notes": st.session_state.get("revision_text", ""),
+    }
+    st.download_button(
+        label="📥 Export All Data",
+        data=json.dumps(export_data, indent=2),
+        file_name="study_agent_export.json",
+        mime="application/json"
+    )
 
     if st.button("🗑️ Reset all data"):
         for key in list(st.session_state.keys()):
@@ -226,23 +214,10 @@ with col3:
         unsafe_allow_html=True,
     )
 
-tabs = st.tabs(["🔍 Ask", "📝 Quiz", "🎓 Exam Mode", "🧠 Weak Areas", "📄 Summary"])
-
-def record_weak_topics(items, selected_answers):
-    updated = False
-    for item, selected in zip(items, selected_answers):
-        correct = item.get("answer_index")
-        topic = item.get("topic", "General")
-        if correct is not None and selected != correct:
-            if topic and topic not in st.session_state.weak_topics:
-                st.session_state.weak_topics.append(topic)
-                updated = True
-    if updated:
-        update_user_data()
-
+tabs = st.tabs(["🔍 Ask", "📝 Quiz", "🎓 Exam Mode", "🧠 Weak Areas", "📄 Summary", "📈 Progress"])
 
 with tabs[0]:
-    st.markdown("<div class='section-header'>Ask questions about your notes</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header' title='Get personalized answers based on your notes'>Ask questions about your notes</div>", unsafe_allow_html=True)
     if not is_ready:
         st.info("Upload a PDF to start asking questions.")
 
@@ -265,22 +240,24 @@ with tabs[0]:
             st.code(split_notes_for_display(context), language="markdown")
 
 with tabs[1]:
-    st.markdown("<div class='section-header'>Quiz mode</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header' title='Test your knowledge with auto-generated quizzes'>Quiz mode</div>", unsafe_allow_html=True)
     st.caption("Generate a practice quiz with answers and explanations.")
 
     if not is_ready:
         st.info("Upload a PDF to generate a quiz.")
 
     if st.button("Generate quiz", type="primary", disabled=not is_ready):
-        with st.spinner("📚 Creating quiz questions..."):
+        with st.status("📚 Creating quiz questions...", expanded=True) as status:
             try:
-                st.session_state.quiz_items = generate_quiz(
+                raw_items = generate_quiz(
                     context=context,
                     num_questions=quiz_count,
                     model_name=model_name,
                     exam_mode=False,
                 )
+                st.session_state.quiz_items = shuffle_quiz_items(raw_items)
                 st.session_state.quiz_result = None
+                status.update(label="Quiz generated!", state="complete", expanded=False)
             except Exception as exc:
                 with st.expander("❌ Error details", expanded=True):
                     st.error(str(exc))
@@ -319,19 +296,23 @@ with tabs[1]:
                 "wrong_items": wrong_items,
                 "submitted_at": datetime.now().isoformat(timespec="seconds"),
             }
+            if len(quiz_items) > 0:
+                add_score(int((correct_count / len(quiz_items)) * 100), "quiz")
             update_user_data()
 
     if st.button("🔄 Regenerate quiz", disabled=not is_ready, key="regen_quiz"):
-        with st.spinner("📚 Creating quiz questions..."):
+        with st.status("📚 Creating quiz questions...", expanded=True) as status:
             try:
                 generate_quiz.clear()
-                st.session_state.quiz_items = generate_quiz(
+                raw_items = generate_quiz(
                     context=context,
                     num_questions=quiz_count,
                     model_name=model_name,
                     exam_mode=False,
                 )
+                st.session_state.quiz_items = shuffle_quiz_items(raw_items)
                 st.session_state.quiz_result = None
+                status.update(label="Quiz regenerated!", state="complete", expanded=False)
             except Exception as exc:
                 with st.expander("❌ Error details", expanded=True):
                     st.error(str(exc))
@@ -379,22 +360,24 @@ with tabs[1]:
                 st.divider()
 
 with tabs[2]:
-    st.markdown("<div class='section-header'>Exam mode</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header' title='Practice real test conditions where answers stay hidden'>Exam mode</div>", unsafe_allow_html=True)
     st.caption("Practice like a real test: answers stay hidden until submission.")
 
     if not is_ready:
         st.info("Upload a PDF to practice Exam Mode.")
 
     if st.button("Generate exam", type="primary", disabled=not is_ready):
-        with st.spinner("🎓 Generating exam..."):
+        with st.status("🎓 Generating exam...", expanded=True) as status:
             try:
-                st.session_state.exam_items = generate_quiz(
+                raw_items = generate_quiz(
                     context=context,
                     num_questions=exam_count,
                     model_name=model_name,
                     exam_mode=True,
                 )
+                st.session_state.exam_items = shuffle_quiz_items(raw_items)
                 st.session_state.exam_result = None
+                status.update(label="Exam generated!", state="complete", expanded=False)
             except Exception as exc:
                 with st.expander("❌ Error details", expanded=True):
                     st.error(str(exc))
@@ -433,19 +416,23 @@ with tabs[2]:
                 "wrong_items": wrong_items,
                 "submitted_at": datetime.now().isoformat(timespec="seconds"),
             }
+            if len(exam_items) > 0:
+                add_score(int((correct_count / len(exam_items)) * 100), "exam")
             update_user_data()
 
     if st.button("🔄 Regenerate exam", disabled=not is_ready, key="regen_exam"):
-        with st.spinner("🎓 Generating exam..."):
+        with st.status("🎓 Generating exam...", expanded=True) as status:
             try:
                 generate_quiz.clear()
-                st.session_state.exam_items = generate_quiz(
+                raw_items = generate_quiz(
                     context=context,
                     num_questions=exam_count,
                     model_name=model_name,
                     exam_mode=True,
                 )
+                st.session_state.exam_items = shuffle_quiz_items(raw_items)
                 st.session_state.exam_result = None
+                status.update(label="Exam regenerated!", state="complete", expanded=False)
             except Exception as exc:
                 with st.expander("❌ Error details", expanded=True):
                     st.error(str(exc))
@@ -493,13 +480,20 @@ with tabs[2]:
                 st.divider()
 
 with tabs[3]:
-    st.markdown("<div class='section-header'>Weak areas tracker & Smart Revision Planner</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header' title='Track incorrect answers and focus your revision'>Weak areas tracker & Smart Revision Planner</div>", unsafe_allow_html=True)
     st.caption("Topics from incorrect answers are saved here. Use them to generate a structured study plan.")
 
     if st.session_state.weak_topics:
         st.markdown("#### Your current weak topics:")
-        for topic in st.session_state.weak_topics:
-            st.markdown(f"- {topic}")
+        for i, topic in enumerate(st.session_state.weak_topics):
+            col_topic, col_del = st.columns([5, 1])
+            with col_topic:
+                st.markdown(f"- {topic}")
+            with col_del:
+                if st.button("🗑️", key=f"del_topic_{i}"):
+                    st.session_state.weak_topics.pop(i)
+                    update_user_data()
+                    st.rerun()
     else:
         st.info("Your weak topics will appear here after you submit a quiz or exam.")
 
@@ -532,6 +526,12 @@ with tabs[3]:
 
     if st.session_state.revision_plan:
         st.markdown(f"<div class='result-card'>\n\n{st.session_state.revision_plan}\n\n</div>", unsafe_allow_html=True)
+        st.download_button(
+            "📥 Download Revision Plan",
+            st.session_state.revision_plan,
+            file_name="revision_plan.md",
+            mime="text/markdown"
+        )
 
     st.divider()
 
@@ -553,6 +553,12 @@ with tabs[3]:
         if st.session_state.revision_text:
             st.markdown("#### Revision notes")
             st.markdown(f"<div class='mini-card'>\n\n{st.session_state.revision_text}\n\n</div>", unsafe_allow_html=True)
+            st.download_button(
+                "📥 Download Revision Notes",
+                st.session_state.revision_text,
+                file_name="revision_notes.md",
+                mime="text/markdown"
+            )
 
     with col2:
         if st.button("📇 Create flashcards", disabled=not is_ready):
@@ -574,8 +580,11 @@ with tabs[3]:
                     st.markdown(f"<div style='padding: 10px; border-left: 3px solid var(--primary-color); margin-left: 10px; background: var(--secondary-background-color); border-radius: 5px; color: var(--text-color);'>{card.get('back', '')}</div>", unsafe_allow_html=True)
                 st.divider()
 
+            flashcards_json = json.dumps(st.session_state.flashcards, indent=2)
+            st.download_button("📥 Download Flashcards", flashcards_json, file_name="flashcards.json", mime="application/json")
+
 with tabs[4]:
-    st.markdown("<div class='section-header'>Quick summary</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header' title='Get a high-level overview of your material'>Quick summary</div>", unsafe_allow_html=True)
     if not is_ready:
         st.info("Upload a PDF to view a quick summary.")
 
@@ -601,6 +610,27 @@ with tabs[4]:
                         st.caption("Try using a shorter question or check your API key.")
     if st.session_state.summary_text:
         st.write(st.session_state.summary_text)
+        st.download_button("📥 Download summary", st.session_state.summary_text, file_name="summary.md", mime="text/markdown")
+
+with tabs[5]:
+    st.markdown("<div class='section-header' title='Track your scores over time'>Study Progress</div>", unsafe_allow_html=True)
+    if not st.session_state.get("score_history"):
+        st.info("Take a quiz or exam to see your progress here.")
+    else:
+        import pandas as pd
+        df = pd.DataFrame(st.session_state.score_history)
+        # Convert isoformat back to datetime for display
+        df['date'] = pd.to_datetime(df['date'])
+
+        st.markdown("#### Score History")
+        st.line_chart(df.set_index("date")["score_percent"])
+
+        st.markdown("#### Recent Results")
+        st.dataframe(
+            df.sort_values(by="date", ascending=False).style.format({"score_percent": "{:.0f}%"}),
+            use_container_width=True,
+            hide_index=True
+        )
 
 st.divider()
 st.markdown("<div style='text-align: center;' class='muted'>🚀 Built with Google Gemini | GenAI Academy 2026 Project</div>", unsafe_allow_html=True)
