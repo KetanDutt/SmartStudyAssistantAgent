@@ -3,7 +3,7 @@ import re
 from typing import Any
 import streamlit as st
 from google import genai
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 from app.config import API_KEY, DEFAULT_MODEL, DEFAULT_TEMPERATURE, require_api_key
 
@@ -36,7 +36,14 @@ def _extract_json(text: str) -> Any:
             continue
     raise ValueError("Model did not return valid JSON.")
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def _is_transient_error(exception):
+    err_msg = str(exception).lower()
+    # Do not retry on invalid API key errors or model not found
+    if "api key not valid" in err_msg or "invalid_argument" in err_msg or "api_key_invalid" in err_msg:
+        return False
+    return True
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), retry=retry_if_exception(_is_transient_error), reraise=True)
 def _generate(model_name: str, prompt: str, temperature: float = DEFAULT_TEMPERATURE) -> str:
     client = get_client()
     try:
