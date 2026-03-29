@@ -28,38 +28,42 @@ st.markdown(
     .hero {
         padding: 1.25rem 1.4rem;
         border-radius: 22px;
-        background: linear-gradient(135deg, rgba(75,85,255,0.08), rgba(255,115,163,0.10));
-        border: 1px solid rgba(120,120,255,0.18);
+        background: var(--secondary-background-color);
+        border: 1px solid var(--secondary-background-color);
         margin-bottom: 1rem;
+        color: var(--text-color);
     }
     .mini-card {
         padding: 1rem 1rem;
         border-radius: 18px;
-        border: 1px solid rgba(140,140,140,0.16);
-        background: rgba(255,255,255,0.7);
+        border: 1px solid var(--secondary-background-color);
+        background: var(--background-color);
+        color: var(--text-color);
     }
     .result-card {
         padding: 1.5rem;
         border-radius: 12px;
-        border: 1px solid rgba(120,120,255,0.2);
-        background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(245,245,255,0.5));
+        border: 1px solid var(--secondary-background-color);
+        background: var(--background-color);
         margin-top: 1rem;
         margin-bottom: 1rem;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        color: var(--text-color);
     }
     .section-header {
         font-size: 1.5rem;
         font-weight: 600;
         margin-bottom: 0.5rem;
-        color: #111827;
+        color: var(--text-color);
     }
     .muted {
-        color: #667085;
+        color: var(--text-color);
+        opacity: 0.7;
         font-size: 0.95rem;
     }
     button[data-baseweb="tab"]:active,
     button[data-baseweb="tab"][aria-selected="true"] {
-        background: linear-gradient(135deg, #4b55ff20, #ff73a320);
+        background: var(--secondary-background-color);
         border-radius: 12px;
     }
     </style>
@@ -351,7 +355,7 @@ with tabs[1]:
         st.markdown(f"""
         <div class="result-card">
             <h3 style="margin-top:0;">Performance Dashboard</h3>
-            <p style="font-size:1.2rem; font-weight:bold; color:{'#2e7d32' if score_percent >= 50 else '#c62828'}">
+            <p style="font-size:1.2rem; font-weight:bold; color:{'#4caf50' if score_percent >= 50 else '#e53935'}">
                 Score: {result['score']} / {result['total']} ({score_percent}%)
             </p>
             {weak_topic_html}
@@ -465,7 +469,7 @@ with tabs[2]:
         st.markdown(f"""
         <div class="result-card">
             <h3 style="margin-top:0;">Performance Dashboard</h3>
-            <p style="font-size:1.2rem; font-weight:bold; color:{'#2e7d32' if score_percent >= 50 else '#c62828'}">
+            <p style="font-size:1.2rem; font-weight:bold; color:{'#4caf50' if score_percent >= 50 else '#e53935'}">
                 Score: {result['score']} / {result['total']} ({score_percent}%)
             </p>
             {weak_topic_html}
@@ -567,7 +571,7 @@ with tabs[3]:
             for i, card in enumerate(st.session_state.flashcards):
                 st.markdown(f"**📌 {card.get('front', 'Flashcard')}**")
                 if st.checkbox("Click to reveal answer", key=f"flashcard_{i}"):
-                    st.markdown(f"<div style='padding: 10px; border-left: 3px solid #ff73a3; margin-left: 10px; background: rgba(255,115,163,0.05); border-radius: 5px;'>{card.get('back', '')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 10px; border-left: 3px solid var(--primary-color); margin-left: 10px; background: var(--secondary-background-color); border-radius: 5px; color: var(--text-color);'>{card.get('back', '')}</div>", unsafe_allow_html=True)
                 st.divider()
 
 with tabs[4]:
