@@ -2,18 +2,15 @@ import json
 import re
 from typing import Any
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import API_KEY, DEFAULT_MODEL, DEFAULT_TEMPERATURE, require_api_key
 
-if API_KEY:
-    genai.configure(api_key=API_KEY)
-
 @st.cache_resource
-def get_model(model_name: str = DEFAULT_MODEL):
+def get_client():
     require_api_key()
-    return genai.GenerativeModel(model_name)
+    return genai.Client(api_key=API_KEY)
 
 def _extract_json(text: str) -> Any:
     text = text.strip()
@@ -41,26 +38,19 @@ def _extract_json(text: str) -> Any:
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def _generate(model_name: str, prompt: str, temperature: float = DEFAULT_TEMPERATURE) -> str:
-    model = get_model(model_name)
-    response = model.generate_content(
-        prompt,
-        generation_config={
-            "temperature": temperature,
-            "max_output_tokens": 2048,
-        },
-    )
+    client = get_client()
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=genai.types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=2048,
+            )
+        )
+    except Exception as e:
+        raise RuntimeError(f"Generation failed: {str(e)}")
 
-    if response.prompt_feedback and response.prompt_feedback.block_reason:
-        raise RuntimeError(f"Prompt blocked: {response.prompt_feedback.block_reason}")
-
-    if not response.candidates:
-        raise RuntimeError("No response candidates returned by Gemini.")
-
-    candidate = response.candidates[0]
-    if candidate.finish_reason != 1:  # 1 = STOP
-        raise RuntimeError(f"Generation stopped due to: {candidate.finish_reason}")
-
-    text = candidate.content.parts[0].text if candidate.content.parts else ""
-    if not text:
+    if not response.text:
         raise RuntimeError("Gemini returned an empty response.")
-    return text.strip()
+    return response.text.strip()

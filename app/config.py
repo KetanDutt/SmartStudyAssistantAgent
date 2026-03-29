@@ -29,12 +29,14 @@ def validate_api_key() -> bool:
         _api_key_valid = False
         return False
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel(DEFAULT_MODEL)
-        model.generate_content("test")
+        from google import genai
+        client = genai.Client(api_key=API_KEY)
+        client.models.generate_content(
+            model=DEFAULT_MODEL,
+            contents="test"
+        )
         _api_key_valid = True
         return True
-    except Exception:
+    except Exception as e:
         _api_key_valid = False
         return False
