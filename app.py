@@ -24,6 +24,19 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    :root {
+        --background-color: #ffffff;
+        --secondary-background-color: #f0f2f6;
+        --text-color: #31333F;
+        --primary-color: #ff4b4b;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --background-color: #0e1117;
+            --secondary-background-color: #262730;
+            --text-color: #fafafa;
+        }
+    }
     .block-container {padding-top: 1.2rem; padding-bottom: 2rem;}
     @media (max-width: 768px) {
         .block-container {padding-top: 0.5rem; padding-left: 0.5rem; padding-right: 0.5rem;}
