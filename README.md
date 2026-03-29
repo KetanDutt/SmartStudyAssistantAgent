@@ -3,6 +3,7 @@
 A beginner-friendly Streamlit app for the GenAI Academy project submission.
 
 ## Features
+
 - **File Upload:** Upload a PDF or paste notes to get started
 - **Q&A System:** Ask questions about the study material, featuring a simple explanation "Explain Like I'm 10" mode and confidence scores
 - **Quizzes:** Generate MCQ quizzes with instant feedback
@@ -14,6 +15,7 @@ A beginner-friendly Streamlit app for the GenAI Academy project submission.
 - **Persistent Storage:** Results and weak areas are saved and reload upon page refresh
 
 ## Demo Steps
+
 1. Add your Google Gemini API key to `.env`
 2. Run `streamlit run app.py`
 3. Upload a PDF or paste your notes on the sidebar
@@ -24,6 +26,7 @@ A beginner-friendly Streamlit app for the GenAI Academy project submission.
 8. Test the interactive click-to-reveal on the Flashcards
 
 ## Tech stack
+
 - Python
 - Streamlit
 - Gemini API via `google-generativeai`
@@ -67,5 +70,6 @@ gcloud run deploy study-agent   --source .   --region us-central1   --allow-unau
 ```
 
 ## Notes
+
 - Do not commit your `.env` file.
 - For production, consider storing the API key in Secret Manager.

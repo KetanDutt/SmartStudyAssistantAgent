@@ -54,14 +54,15 @@ st.markdown(
         padding: 1rem 1rem;
         border-radius: 18px;
         border: 1px solid var(--secondary-background-color);
-        background: var(--background-color);
+        background: var(--secondary-background-color);
         color: var(--text-color);
+        margin-bottom: 1rem;
     }
     .result-card {
         padding: 1.5rem;
         border-radius: 12px;
         border: 1px solid var(--secondary-background-color);
-        background: var(--background-color);
+        background: var(--secondary-background-color);
         margin-top: 1rem;
         margin-bottom: 1rem;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
@@ -82,6 +83,19 @@ st.markdown(
     button[data-baseweb="tab"][aria-selected="true"] {
         background: var(--secondary-background-color);
         border-radius: 12px;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        width: 100%;
+    }
+    .stTabs [data-baseweb="tab"] {
+        flex-grow: 1;
+        text-align: center;
+    }
+    hr {
+        margin: 0px !important;
+    }
+    header[data-testid="stHeader"] {
+        display: none;
     }
     </style>
     """,
@@ -186,9 +200,11 @@ if not is_ready:
     <div class="result-card" style="text-align: center;">
         <h2>📄 Upload your notes to get started</h2>
         <p class="muted">You can:</p>
-        <p>• Ask questions 🔍</p>
-        <p>• Generate quizzes 📝</p>
-        <p>• Track weak areas 🧠</p>
+        <div style="display: flex;justify-content: space-around;align-items: center;align-content: center;flex-wrap: nowrap;flex-direction: row;">
+            <p>• Ask questions 🔍</p>
+            <p>• Generate quizzes 📝</p>
+            <p>• Track weak areas 🧠</p>
+        <div>
     </div>
     """, unsafe_allow_html=True)
 
