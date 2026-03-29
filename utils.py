@@ -11,7 +11,13 @@ import google.generativeai as genai
 load_dotenv()
 
 API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
+
+MAX_CONTEXT_WORDS_QA = 2600
+MAX_CONTEXT_WORDS_SUMMARY = 3000
+MAX_CONTEXT_WORDS_QUIZ = 2000
+DEFAULT_TEMPERATURE = 0.2
+QUIZ_TEMPERATURE = 0.3
 
 if API_KEY:
     genai.configure(api_key=API_KEY)
@@ -33,6 +39,14 @@ def require_api_key() -> None:
         raise RuntimeError(
             "Missing GOOGLE_API_KEY. Add it to your .env file or set it as an environment variable."
         )
+
+
+def validate_api_key() -> bool:
+    try:
+        require_api_key()
+        return True
+    except RuntimeError:
+        return False
 
 
 @lru_cache(maxsize=4)
@@ -57,7 +71,11 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def chunk_text(text: str, max_words: int = 900) -> List[str]:
+import hashlib
+
+
+@lru_cache(maxsize=4)
+def chunk_text_cached(text_hash: str, text: str, max_words: int = 900) -> List[str]:
     words = text.split()
     if not words:
         return []
@@ -69,11 +87,22 @@ def chunk_text(text: str, max_words: int = 900) -> List[str]:
     return chunks
 
 
+def chunk_text(text: str, max_words: int = 900) -> List[str]:
+    """Helper for chunking to avoid changing existing calls."""
+    return get_chunks(text, max_words)
+
+
+def get_chunks(text: str, max_words: int = 900) -> List[str]:
+    text_hash = hashlib.md5(text.encode()).hexdigest()
+    return chunk_text_cached(text_hash, text, max_words)
+
+
 def tokenize(text: str) -> List[str]:
     return [w.lower() for w in re.findall(r"[A-Za-z0-9]+", text) if w.lower() not in STOPWORDS]
 
 
 def rank_chunks(query: str, chunks: List[str], top_k: int = 4) -> List[str]:
+    """Return the top_k chunks most relevant to the query using keyword overlap."""
     if not chunks:
         return []
 
@@ -99,7 +128,7 @@ def rank_chunks(query: str, chunks: List[str], top_k: int = 4) -> List[str]:
 
 
 def select_context_for_question(text: str, question: str, max_words: int = 2600) -> str:
-    chunks = chunk_text(text)
+    chunks = get_chunks(text)
     selected = rank_chunks(question, chunks, top_k=5)
     if not selected:
         selected = chunks[:4] if chunks else [text]
@@ -111,7 +140,7 @@ def select_context_for_question(text: str, question: str, max_words: int = 2600)
 
 
 def select_context_for_generation(text: str, max_words: int = 3200) -> str:
-    chunks = chunk_text(text)
+    chunks = get_chunks(text)
     if not chunks:
         return text
 
@@ -158,7 +187,7 @@ def _extract_json(text: str) -> Any:
     raise ValueError("Model did not return valid JSON.")
 
 
-def _generate(model_name: str, prompt: str, temperature: float = 0.2) -> str:
+def _generate(model_name: str, prompt: str, temperature: float = DEFAULT_TEMPERATURE) -> str:
     model = get_model(model_name)
     response = model.generate_content(
         prompt,
@@ -167,24 +196,25 @@ def _generate(model_name: str, prompt: str, temperature: float = 0.2) -> str:
             "max_output_tokens": 2048,
         },
     )
-    text = getattr(response, "text", None)
-    if not text:
-        parts = []
-        for candidate in getattr(response, "candidates", []) or []:
-            content = getattr(candidate, "content", None)
-            if content and getattr(content, "parts", None):
-                for part in content.parts:
-                    part_text = getattr(part, "text", None)
-                    if part_text:
-                        parts.append(part_text)
-        text = "\n".join(parts).strip()
+
+    if response.prompt_feedback and response.prompt_feedback.block_reason:
+        raise RuntimeError(f"Prompt blocked: {response.prompt_feedback.block_reason}")
+
+    if not response.candidates:
+        raise RuntimeError("No response candidates returned by Gemini.")
+
+    candidate = response.candidates[0]
+    if candidate.finish_reason != 1:  # 1 = STOP
+        raise RuntimeError(f"Generation stopped due to: {candidate.finish_reason}")
+
+    text = candidate.content.parts[0].text if candidate.content.parts else ""
     if not text:
         raise RuntimeError("Gemini returned an empty response.")
     return text.strip()
 
 
 def answer_question(context: str, question: str, model_name: str = DEFAULT_MODEL) -> str:
-    selected_context = select_context_for_question(context, question)
+    selected_context = select_context_for_question(context, question, max_words=MAX_CONTEXT_WORDS_QA)
     prompt = f"""
 You are a friendly study assistant helping a student learn from their notes.
 
@@ -202,11 +232,11 @@ Student question:
 
 Answer:
 """
-    return _generate(model_name, prompt, temperature=0.2)
+    return _generate(model_name, prompt, temperature=DEFAULT_TEMPERATURE)
 
 
 def summarize_notes(context: str, model_name: str = DEFAULT_MODEL) -> str:
-    selected_context = select_context_for_generation(context, max_words=3000)
+    selected_context = select_context_for_generation(context, max_words=MAX_CONTEXT_WORDS_SUMMARY)
     prompt = f"""
 Summarize these study notes for a student.
 
@@ -221,7 +251,7 @@ Notes:
 
 Summary:
 """
-    return _generate(model_name, prompt, temperature=0.2)
+    return _generate(model_name, prompt, temperature=DEFAULT_TEMPERATURE)
 
 
 def generate_quiz(
@@ -230,7 +260,7 @@ def generate_quiz(
     model_name: str = DEFAULT_MODEL,
     exam_mode: bool = False,
 ) -> List[Dict[str, Any]]:
-    selected_context = select_context_for_generation(context, max_words=3200)
+    selected_context = select_context_for_generation(context, max_words=MAX_CONTEXT_WORDS_QUIZ)
     mode_line = (
         "Do not include explanations in the questions section."
         if exam_mode
@@ -268,8 +298,17 @@ Rules:
 Notes:
 {selected_context}
 """
-    raw = _generate(model_name, prompt, temperature=0.3)
-    data = _extract_json(raw)
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            raw = _generate(model_name, prompt, temperature=QUIZ_TEMPERATURE)
+            data = _extract_json(raw)
+            break
+        except ValueError:
+            if attempt == max_retries - 1:
+                raise
+            prompt += "\n\nReturn ONLY valid JSON, no extra text."
+
     items = data.get("items", []) if isinstance(data, dict) else []
     normalized = []
     for idx, item in enumerate(items[:num_questions], start=1):
@@ -301,13 +340,50 @@ Notes:
     return normalized[:num_questions]
 
 
+def generate_flashcards(context: str, weak_topics: List[str], model_name: str) -> List[Dict[str, str]]:
+    """Generates simple flashcards for weak topics."""
+    topic_list = ", ".join(weak_topics)
+    if not topic_list:
+        return []
+
+    selected_context = select_context_for_generation(context, max_words=MAX_CONTEXT_WORDS_QUIZ)
+    prompt = f"""
+Create 5 simple flashcards based on the notes. Focus on these topics: {topic_list}.
+If the topics are not well covered, make flashcards for important general concepts in the notes.
+
+Return ONLY valid JSON with this exact shape:
+{{
+  "flashcards": [
+    {{
+      "front": "Question or term",
+      "back": "Short answer or definition"
+    }}
+  ]
+}}
+
+Notes:
+{selected_context}
+"""
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            raw = _generate(model_name, prompt, temperature=DEFAULT_TEMPERATURE)
+            data = _extract_json(raw)
+            return data.get("flashcards", [])
+        except ValueError:
+            if attempt == max_retries - 1:
+                return []
+            prompt += "\n\nReturn ONLY valid JSON, no extra text."
+    return []
+
+
 def generate_revision_notes(
     context: str,
     weak_topics: List[str],
     model_name: str = DEFAULT_MODEL,
 ) -> str:
     topic_list = ", ".join(sorted(set([t for t in weak_topics if t.strip()]))) or "general weak areas"
-    selected_context = select_context_for_generation(context, max_words=2500)
+    selected_context = select_context_for_generation(context, max_words=MAX_CONTEXT_WORDS_SUMMARY)
     prompt = f"""
 You are a patient tutor. Create revision notes for the student's weak topics.
 
@@ -326,4 +402,4 @@ Notes:
 
 Revision notes:
 """
-    return _generate(model_name, prompt, temperature=0.2)
+    return _generate(model_name, prompt, temperature=DEFAULT_TEMPERATURE)

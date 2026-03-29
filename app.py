@@ -10,6 +10,8 @@ from utils import (
     generate_revision_notes,
     summarize_notes,
     split_notes_for_display,
+    validate_api_key,
+    generate_flashcards,
 )
 
 st.set_page_config(
@@ -40,6 +42,11 @@ st.markdown(
         color: #667085;
         font-size: 0.95rem;
     }
+    button[data-baseweb="tab"]:active,
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background: linear-gradient(135deg, #4b55ff20, #ff73a320);
+        border-radius: 12px;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -63,6 +70,11 @@ def ensure_state():
 
 
 ensure_state()
+
+if not validate_api_key():
+    st.error("🚨 Google API key is missing or invalid. Please add a valid `GOOGLE_API_KEY` to your `.env` file.")
+    st.stop()
+
 
 st.markdown(
     """
@@ -91,12 +103,18 @@ with st.sidebar:
     st.divider()
     st.caption("Tip: keep the notes concise for faster generation.")
 
+    if st.button("🗑️ Reset all data"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+
 source_text = ""
 source_name = ""
 
 if uploaded is not None:
     try:
-        source_text = extract_text_from_pdf(uploaded)
+        with st.spinner("📄 Reading PDF... please wait"):
+            source_text = extract_text_from_pdf(uploaded)
         source_name = uploaded.name
     except Exception as exc:
         st.error(f"Could not read the PDF: {exc}")
@@ -128,6 +146,8 @@ with col1:
     )
 with col2:
     word_count = len(context.split())
+    if word_count > 10000:
+        st.warning("⚠️ Large document detected. Quiz and summary generation may take longer.")
     st.markdown(
         f"""
         <div class="mini-card">
@@ -148,7 +168,7 @@ with col3:
         unsafe_allow_html=True,
     )
 
-tabs = st.tabs(["Ask", "Quiz", "Exam Mode", "Weak Areas", "Summary"])
+tabs = st.tabs(["🔍 Ask", "📝 Quiz", "🎓 Exam Mode", "🧠 Weak Areas", "📄 Summary"])
 
 def record_weak_topics(items, selected_answers):
     for item, selected in zip(items, selected_answers):
@@ -171,7 +191,9 @@ with tabs[0]:
                     answer = answer_question(context, question, model_name=model_name)
                     st.markdown(answer)
                 except Exception as exc:
-                    st.error(str(exc))
+                    with st.expander("❌ Error details", expanded=True):
+                        st.error(str(exc))
+                        st.caption("Try using a shorter question or check your API key.")
 
     with st.expander("Preview the loaded notes"):
         st.code(split_notes_for_display(context), language="markdown")
@@ -191,7 +213,9 @@ with tabs[1]:
                 )
                 st.session_state.quiz_result = None
             except Exception as exc:
-                st.error(str(exc))
+                with st.expander("❌ Error details", expanded=True):
+                    st.error(str(exc))
+                    st.caption("Try using a shorter question or check your API key.")
 
     quiz_items = st.session_state.quiz_items
 
@@ -230,6 +254,11 @@ with tabs[1]:
     if st.session_state.quiz_result:
         result = st.session_state.quiz_result
         st.success(f"Score: {result['score']} / {result['total']}")
+
+        import json
+        result_json = json.dumps(st.session_state.quiz_result, indent=2)
+        st.download_button("📥 Download quiz results", result_json, file_name="quiz_results.json")
+
         if result["wrong_items"]:
             st.markdown("#### Review the ones you missed")
             for item in result["wrong_items"]:
@@ -256,7 +285,9 @@ with tabs[2]:
                 )
                 st.session_state.exam_result = None
             except Exception as exc:
-                st.error(str(exc))
+                with st.expander("❌ Error details", expanded=True):
+                    st.error(str(exc))
+                    st.caption("Try using a shorter question or check your API key.")
 
     exam_items = st.session_state.exam_items
 
@@ -295,6 +326,10 @@ with tabs[2]:
     if st.session_state.exam_result:
         result = st.session_state.exam_result
         st.success(f"Exam score: {result['score']} / {result['total']}")
+        import json
+        result_json = json.dumps(st.session_state.exam_result, indent=2)
+        st.download_button("📥 Download exam results", result_json, file_name="exam_results.json")
+
         if result["wrong_items"]:
             st.markdown("#### Answers revealed after submission")
             for item in result["wrong_items"]:
@@ -325,11 +360,27 @@ with tabs[3]:
                     model_name=model_name,
                 )
             except Exception as exc:
-                st.error(str(exc))
+                with st.expander("❌ Error details", expanded=True):
+                    st.error(str(exc))
+                    st.caption("Try using a shorter question or check your API key.")
 
     if st.session_state.revision_text:
         st.markdown("### Revision notes")
         st.write(st.session_state.revision_text)
+
+    if st.button("📇 Create flashcards"):
+        with st.spinner("Generating flashcards..."):
+            try:
+                flashcards = generate_flashcards(context, st.session_state.weak_topics, model_name)
+                if not flashcards:
+                    st.warning("Could not generate flashcards.")
+                for card in flashcards:
+                    with st.expander(f"📌 {card.get('front', 'Flashcard')}"):
+                        st.write(card.get('back', ''))
+            except Exception as exc:
+                with st.expander("❌ Error details", expanded=True):
+                    st.error(str(exc))
+                    st.caption("Try using a shorter question or check your API key.")
 
 with tabs[4]:
     st.subheader("Quick summary")
@@ -339,7 +390,9 @@ with tabs[4]:
                 try:
                     st.session_state.summary_text = summarize_notes(context, model_name=model_name)
                 except Exception as exc:
-                    st.error(str(exc))
+                    with st.expander("❌ Error details", expanded=True):
+                        st.error(str(exc))
+                        st.caption("Try using a shorter question or check your API key.")
     if st.session_state.summary_text:
         st.write(st.session_state.summary_text)
 
