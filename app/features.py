@@ -41,8 +41,14 @@ def select_context_for_generation(text: str, max_words: int = 3200) -> str:
     return " ".join(context.split()[:max_words])
 
 
-def answer_question(context: str, question: str, model_name: str = DEFAULT_MODEL) -> str:
+def answer_question(context: str, question: str, model_name: str = DEFAULT_MODEL, beginner_mode: bool = False) -> str:
     selected_context = select_context_for_question(context, question, max_words=MAX_CONTEXT_WORDS_QA)
+
+    beginner_instruction = (
+        "- Explain it extremely simply, as if you are explaining it to a 10-year-old, using easy-to-understand examples.\n"
+        if beginner_mode else ""
+    )
+
     prompt = f"""
 You are a friendly study assistant helping a student learn from their notes.
 
@@ -50,7 +56,7 @@ Rules:
 - Use only the provided notes as your source.
 - If the notes do not contain enough information, say so clearly.
 - Explain in simple language.
-- Keep the answer structured and easy to revise.
+{beginner_instruction}- Keep the answer structured and easy to revise.
 
 Notes:
 {selected_context}
@@ -139,6 +145,7 @@ Notes:
 
     items = data.get("items", []) if isinstance(data, dict) else []
     normalized = []
+    import random
     for idx, item in enumerate(items[:num_questions], start=1):
         options = item.get("options", [])
         if not isinstance(options, list) or len(options) != 4:
@@ -150,13 +157,26 @@ Notes:
             answer_index = 0
         if answer_index not in (0, 1, 2, 3):
             answer_index = 0
+
+        clean_options = [str(opt).strip() for opt in options[:4]]
+        # Randomize options
+        indexed_options = list(enumerate(clean_options))
+        random.shuffle(indexed_options)
+
+        shuffled_options = []
+        new_answer_index = 0
+        for new_idx, (original_idx, opt) in enumerate(indexed_options):
+            shuffled_options.append(opt)
+            if original_idx == answer_index:
+                new_answer_index = new_idx
+
         normalized.append(
             {
                 "id": item.get("id", idx),
                 "topic": str(item.get("topic", "General")).strip() or "General",
                 "question": str(item.get("question", "")).strip(),
-                "options": [str(opt).strip() for opt in options[:4]],
-                "answer_index": answer_index,
+                "options": shuffled_options,
+                "answer_index": new_answer_index,
                 "explanation": str(item.get("explanation", "")).strip(),
             }
         )
@@ -204,6 +224,27 @@ Notes:
             prompt += "\n\nReturn ONLY valid JSON, no extra text."
     return []
 
+
+def generate_revision_plan(context: str, weak_topics: List[str], model_name: str = DEFAULT_MODEL) -> str:
+    topic_list = ", ".join(sorted(set([t for t in weak_topics if t.strip()]))) or "general topics"
+    selected_context = select_context_for_generation(context, max_words=MAX_CONTEXT_WORDS_SUMMARY)
+    prompt = f"""
+You are an expert study coach. The student needs to improve on these weak topics: {topic_list}.
+Based on the provided notes, create a structured 3 to 5-day revision plan.
+
+Requirements:
+- Organize by Day (e.g., Day 1: [Topic]).
+- For each day, include 2-3 specific, actionable daily tasks.
+- Provide a short goal for the day.
+- Format the plan clearly using Markdown headers and bullet points.
+- Keep the language encouraging and simple.
+
+Notes:
+{selected_context}
+
+Revision Plan:
+"""
+    return _generate(model_name, prompt, temperature=DEFAULT_TEMPERATURE)
 
 def generate_revision_notes(
     context: str,

@@ -8,6 +8,7 @@ from app.text_processing import split_notes_for_display
 from app.features import (
     answer_question,
     generate_quiz,
+    generate_revision_plan,
     generate_revision_notes,
     summarize_notes,
     generate_flashcards,
@@ -37,6 +38,21 @@ st.markdown(
         border: 1px solid rgba(140,140,140,0.16);
         background: rgba(255,255,255,0.7);
     }
+    .result-card {
+        padding: 1.5rem;
+        border-radius: 12px;
+        border: 1px solid rgba(120,120,255,0.2);
+        background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(245,245,255,0.5));
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .section-header {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #111827;
+    }
     .muted {
         color: #667085;
         font-size: 0.95rem;
@@ -62,6 +78,7 @@ def ensure_state():
         "exam_result": None,
         "summary_text": "",
         "revision_text": "",
+        "revision_plan": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -100,6 +117,8 @@ with st.sidebar:
     exam_count = st.slider("Exam questions", 5, 15, 8)
     retrieval_method = st.selectbox("Retrieval method", ["Keyword overlap", "Embedding (experimental)"])
     st.divider()
+    beginner_mode = st.toggle("Explain Like I'm 10 Mode", value=False, help="Simplify explanations and examples")
+    st.divider()
     st.caption("Tip: keep the notes concise for faster generation.")
 
     if st.button("🗑️ Reset all data"):
@@ -127,10 +146,10 @@ if source_text:
     st.session_state.source_name = source_name
 
 context = st.session_state.context_text.strip()
+is_ready = bool(context)
 
-if not context:
+if not is_ready:
     st.info("Upload a PDF or paste notes to start.")
-    st.stop()
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -179,29 +198,36 @@ def record_weak_topics(items, selected_answers):
 
 
 with tabs[0]:
-    st.subheader("Ask questions about your notes")
-    question = st.text_input("Your question", placeholder="Explain photosynthesis in simple words...")
-    if st.button("Get answer", type="primary"):
+    st.markdown("<div class='section-header'>Ask questions about your notes</div>", unsafe_allow_html=True)
+    if not is_ready:
+        st.info("Upload a PDF to start asking questions.")
+
+    question = st.text_input("Your question", placeholder="Explain photosynthesis in simple words...", disabled=not is_ready)
+    if st.button("Get answer", type="primary", disabled=not is_ready):
         if not question.strip():
             st.warning("Type a question first.")
         else:
             with st.spinner("Thinking..."):
                 try:
-                    answer = answer_question(context, question, model_name=model_name)
-                    st.markdown(answer)
+                    answer = answer_question(context, question, model_name=model_name, beginner_mode=beginner_mode)
+                    st.markdown(f"<div class='result-card'>\n\n{answer}\n\n</div>", unsafe_allow_html=True)
                 except Exception as exc:
                     with st.expander("❌ Error details", expanded=True):
                         st.error(str(exc))
                         st.caption("Try using a shorter question or check your API key.")
 
-    with st.expander("Preview the loaded notes"):
-        st.code(split_notes_for_display(context), language="markdown")
+    if is_ready:
+        with st.expander("Preview the loaded notes"):
+            st.code(split_notes_for_display(context), language="markdown")
 
 with tabs[1]:
-    st.subheader("Quiz mode")
+    st.markdown("<div class='section-header'>Quiz mode</div>", unsafe_allow_html=True)
     st.caption("Generate a practice quiz with answers and explanations.")
 
-    if st.button("Generate quiz", type="primary"):
+    if not is_ready:
+        st.info("Upload a PDF to generate a quiz.")
+
+    if st.button("Generate quiz", type="primary", disabled=not is_ready):
         with st.spinner("Creating quiz..."):
             try:
                 st.session_state.quiz_items = generate_quiz(
@@ -252,7 +278,15 @@ with tabs[1]:
 
     if st.session_state.quiz_result:
         result = st.session_state.quiz_result
-        st.success(f"Score: {result['score']} / {result['total']}")
+
+        st.markdown(f"""
+        <div class="result-card">
+            <h3 style="margin-top:0;">Quiz Results</h3>
+            <p style="font-size:1.2rem; font-weight:bold; color:{'#2e7d32' if result['score'] > result['total']/2 else '#c62828'}">
+                Score: {result['score']} / {result['total']}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
         import json
         result_json = json.dumps(st.session_state.quiz_result, indent=2)
@@ -268,12 +302,16 @@ with tabs[1]:
                     st.write(f"Correct answer: {options[answer_index]}")
                 if item.get("explanation"):
                     st.caption(item["explanation"])
+                st.divider()
 
 with tabs[2]:
-    st.subheader("Exam mode")
+    st.markdown("<div class='section-header'>Exam mode</div>", unsafe_allow_html=True)
     st.caption("Practice like a real test: answers stay hidden until submission.")
 
-    if st.button("Generate exam", type="primary"):
+    if not is_ready:
+        st.info("Upload a PDF to practice Exam Mode.")
+
+    if st.button("Generate exam", type="primary", disabled=not is_ready):
         with st.spinner("Creating exam..."):
             try:
                 st.session_state.exam_items = generate_quiz(
@@ -324,7 +362,16 @@ with tabs[2]:
 
     if st.session_state.exam_result:
         result = st.session_state.exam_result
-        st.success(f"Exam score: {result['score']} / {result['total']}")
+
+        st.markdown(f"""
+        <div class="result-card">
+            <h3 style="margin-top:0;">Exam Results</h3>
+            <p style="font-size:1.2rem; font-weight:bold; color:{'#2e7d32' if result['score'] > result['total']/2 else '#c62828'}">
+                Score: {result['score']} / {result['total']}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
         import json
         result_json = json.dumps(st.session_state.exam_result, indent=2)
         st.download_button("📥 Download exam results", result_json, file_name="exam_results.json")
@@ -339,21 +386,23 @@ with tabs[2]:
                     st.write(f"Correct answer: {options[answer_index]}")
                 if item.get("explanation"):
                     st.caption(item["explanation"])
+                st.divider()
 
 with tabs[3]:
-    st.subheader("Weak areas tracker")
-    st.caption("Topics from incorrect answers are saved here during this session.")
+    st.markdown("<div class='section-header'>Weak areas tracker & Smart Revision Planner</div>", unsafe_allow_html=True)
+    st.caption("Topics from incorrect answers are saved here. Use them to generate a structured study plan.")
 
     if st.session_state.weak_topics:
+        st.markdown("#### Your current weak topics:")
         for topic in st.session_state.weak_topics:
             st.markdown(f"- {topic}")
     else:
         st.info("Your weak topics will appear here after you submit a quiz or exam.")
 
-    if st.button("Generate revision notes", type="primary"):
-        with st.spinner("Building revision notes..."):
+    if st.button("Generate Smart Revision Plan", type="primary", disabled=not is_ready or not st.session_state.weak_topics):
+        with st.spinner("Building a structured 3-5 day revision plan..."):
             try:
-                st.session_state.revision_text = generate_revision_notes(
+                st.session_state.revision_plan = generate_revision_plan(
                     context=context,
                     weak_topics=st.session_state.weak_topics,
                     model_name=model_name,
@@ -361,30 +410,53 @@ with tabs[3]:
             except Exception as exc:
                 with st.expander("❌ Error details", expanded=True):
                     st.error(str(exc))
-                    st.caption("Try using a shorter question or check your API key.")
 
-    if st.session_state.revision_text:
-        st.markdown("### Revision notes")
-        st.write(st.session_state.revision_text)
+    if st.session_state.revision_plan:
+        st.markdown(f"<div class='result-card'>\n\n{st.session_state.revision_plan}\n\n</div>", unsafe_allow_html=True)
 
-    if st.button("📇 Create flashcards"):
-        with st.spinner("Generating flashcards..."):
-            try:
-                flashcards = generate_flashcards(context, st.session_state.weak_topics, model_name)
-                if not flashcards:
-                    st.warning("Could not generate flashcards.")
-                for card in flashcards:
-                    with st.expander(f"📌 {card.get('front', 'Flashcard')}"):
-                        st.write(card.get('back', ''))
-            except Exception as exc:
-                with st.expander("❌ Error details", expanded=True):
-                    st.error(str(exc))
-                    st.caption("Try using a shorter question or check your API key.")
+    st.divider()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Generate quick revision notes", disabled=not is_ready):
+            with st.spinner("Building revision notes..."):
+                try:
+                    st.session_state.revision_text = generate_revision_notes(
+                        context=context,
+                        weak_topics=st.session_state.weak_topics,
+                        model_name=model_name,
+                    )
+                except Exception as exc:
+                    with st.expander("❌ Error details", expanded=True):
+                        st.error(str(exc))
+                        st.caption("Try using a shorter question or check your API key.")
+
+        if st.session_state.revision_text:
+            st.markdown("#### Revision notes")
+            st.markdown(f"<div class='mini-card'>\n\n{st.session_state.revision_text}\n\n</div>", unsafe_allow_html=True)
+
+    with col2:
+        if st.button("📇 Create flashcards", disabled=not is_ready):
+            with st.spinner("Generating flashcards..."):
+                try:
+                    flashcards = generate_flashcards(context, st.session_state.weak_topics, model_name)
+                    if not flashcards:
+                        st.warning("Could not generate flashcards.")
+                    for card in flashcards:
+                        with st.expander(f"📌 {card.get('front', 'Flashcard')}"):
+                            st.write(card.get('back', ''))
+                except Exception as exc:
+                    with st.expander("❌ Error details", expanded=True):
+                        st.error(str(exc))
+                        st.caption("Try using a shorter question or check your API key.")
 
 with tabs[4]:
-    st.subheader("Quick summary")
+    st.markdown("<div class='section-header'>Quick summary</div>", unsafe_allow_html=True)
+    if not is_ready:
+        st.info("Upload a PDF to view a quick summary.")
+
     if not st.session_state.summary_text:
-        if st.button("Summarize notes", type="primary"):
+        if st.button("Summarize notes", type="primary", disabled=not is_ready):
             with st.spinner("Summarizing..."):
                 try:
                     st.session_state.summary_text = summarize_notes(context, model_name=model_name)
