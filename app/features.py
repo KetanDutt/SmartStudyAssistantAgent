@@ -41,27 +41,40 @@ def select_context_for_generation(text: str, max_words: int = 3200) -> str:
     return " ".join(context.split()[:max_words])
 
 
+import streamlit as st
+
+@st.cache_data(show_spinner=False)
 def answer_question(context: str, question: str, model_name: str = DEFAULT_MODEL, beginner_mode: bool = False) -> str:
     selected_context = select_context_for_question(context, question, max_words=MAX_CONTEXT_WORDS_QA)
 
     beginner_instruction = (
-        "- Explain it extremely simply, as if you are explaining it to a 10-year-old, using easy-to-understand examples.\n"
+        "* Explain as if teaching a 10-year-old\n* Use very simple analogies and examples\n"
         if beginner_mode else ""
     )
 
     prompt = f"""
-You are a friendly study assistant helping a student learn from their notes.
+You are an expert AI tutor helping a student learn effectively.
 
-Rules:
-- Use only the provided notes as your source.
-- If the notes do not contain enough information, say so clearly.
-- Explain in simple language.
-{beginner_instruction}- Keep the answer structured and easy to revise.
+Instructions:
+* Use ONLY the provided notes as your source.
+* If information is missing, clearly say: "This is not covered in the notes."
+* Explain concepts in a structured, easy-to-understand way.
+* Use:
+  * Bullet points
+  * Simple language
+  * Real-world examples
+  * Highlight key terms using **bold**
+* Keep answers concise but useful for revision.
+
+If beginner_mode is enabled:
+{beginner_instruction}
+
+Include a "Confidence Score" at the very end of your answer on a new line, indicating how confident you are in your answer based on the notes. Example: "Confidence: High / Medium / Low"
 
 Notes:
 {selected_context}
 
-Student question:
+Question:
 {question}
 
 Answer:
@@ -69,16 +82,22 @@ Answer:
     return _generate(model_name, prompt, temperature=DEFAULT_TEMPERATURE)
 
 
+@st.cache_data(show_spinner=False)
 def summarize_notes(context: str, model_name: str = DEFAULT_MODEL) -> str:
     selected_context = select_context_for_generation(context, max_words=MAX_CONTEXT_WORDS_SUMMARY)
     prompt = f"""
-Summarize these study notes for a student.
+You are an expert summarizer.
+
+Create a high-quality study summary.
 
 Requirements:
-- Give a short title.
-- Include the 5 most important ideas.
-- Use simple wording.
-- Keep it concise but useful for revision.
+* Give a short title
+* Include:
+  * 5 key points
+  * Important concepts
+  * Key terms in **bold**
+* Use bullet points
+* Keep it concise and revision-friendly
 
 Notes:
 {selected_context}
@@ -88,6 +107,7 @@ Summary:
     return _generate(model_name, prompt, temperature=DEFAULT_TEMPERATURE)
 
 
+@st.cache_data(show_spinner=False)
 def generate_quiz(
     context: str,
     num_questions: int = 5,
@@ -96,38 +116,40 @@ def generate_quiz(
 ) -> List[Dict[str, Any]]:
     selected_context = select_context_for_generation(context, max_words=MAX_CONTEXT_WORDS_QUIZ)
     mode_line = (
-        "Do not include explanations in the questions section."
+        "* Do not include explanations in the questions section."
         if exam_mode
-        else "Include a short explanation for the correct answer."
+        else "* Include:\n  * Short explanation\n  * Real-world or conceptual clarity"
     )
 
     prompt = f"""
-Create a JSON object for a study quiz based only on the notes below.
+You are an expert teacher creating a high-quality quiz for revision.
 
-Return ONLY valid JSON with this exact shape:
+Return ONLY valid JSON in this exact format:
 {{
-  "title": "Quiz title",
-  "items": [
-    {{
-      "id": 1,
-      "topic": "short topic name",
-      "question": "question text",
-      "options": ["option A", "option B", "option C", "option D"],
-      "answer_index": 0,
-      "explanation": "short explanation"
-    }}
-  ]
+"title": "Quiz title",
+"items": [
+{{
+"id": 1,
+"topic": "topic name",
+"question": "clear question",
+"options": ["A", "B", "C", "D"],
+"answer_index": 0,
+"explanation": "short explanation"
+}}
+]
 }}
 
 Rules:
-- Make exactly {num_questions} items.
-- Every question must have exactly 4 options.
-- answer_index must be 0, 1, 2, or 3.
-- Keep the language simple and beginner-friendly.
-- Choose practical questions that help revision.
-- {mode_line}
-- Do not wrap the JSON in markdown fences.
-- Do not add extra text.
+* Create exactly {num_questions} questions
+* Each question must:
+  * Be clear and unambiguous
+  * Test understanding (not just memorization)
+* Use 4 options always
+* Only ONE correct answer
+{mode_line}
+* Cover different topics evenly
+* Keep language simple and beginner-friendly
+* Do NOT include extra text outside JSON
 
 Notes:
 {selected_context}
@@ -188,6 +210,7 @@ Notes:
     return normalized[:num_questions]
 
 
+@st.cache_data(show_spinner=False)
 def generate_flashcards(context: str, weak_topics: List[str], model_name: str) -> List[Dict[str, str]]:
     """Generates simple flashcards for weak topics."""
     topic_list = ", ".join(weak_topics)
@@ -196,21 +219,32 @@ def generate_flashcards(context: str, weak_topics: List[str], model_name: str) -
 
     selected_context = select_context_for_generation(context, max_words=MAX_CONTEXT_WORDS_QUIZ)
     prompt = f"""
-Create 5 simple flashcards based on the notes. Focus on these topics: {topic_list}.
-If the topics are not well covered, make flashcards for important general concepts in the notes.
+You are a learning assistant generating revision flashcards.
 
-Return ONLY valid JSON with this exact shape:
+Create 5 high-quality flashcards.
+
+Return ONLY valid JSON:
 {{
-  "flashcards": [
-    {{
-      "front": "Question or term",
-      "back": "Short answer or definition"
-    }}
-  ]
+"flashcards": [
+{{
+"front": "question or concept",
+"back": "clear explanation"
 }}
+]
+}}
+
+Rules:
+* Keep front short and clear
+* Back should:
+  * Explain simply
+  * Include key idea
+* Focus on important concepts
+* Avoid long paragraphs
 
 Notes:
 {selected_context}
+Weak topics:
+{topic_list}
 """
     max_retries = 2
     for attempt in range(max_retries):
@@ -225,19 +259,28 @@ Notes:
     return []
 
 
+@st.cache_data(show_spinner=False)
 def generate_revision_plan(context: str, weak_topics: List[str], model_name: str = DEFAULT_MODEL) -> str:
     topic_list = ", ".join(sorted(set([t for t in weak_topics if t.strip()]))) or "general topics"
     selected_context = select_context_for_generation(context, max_words=MAX_CONTEXT_WORDS_SUMMARY)
     prompt = f"""
-You are an expert study coach. The student needs to improve on these weak topics: {topic_list}.
-Based on the provided notes, create a structured 3 to 5-day revision plan.
+You are an expert study coach.
+
+The student is weak in these topics:
+{topic_list}
+
+Create a structured 3–5 day revision plan.
 
 Requirements:
-- Organize by Day (e.g., Day 1: [Topic]).
-- For each day, include 2-3 specific, actionable daily tasks.
-- Provide a short goal for the day.
-- Format the plan clearly using Markdown headers and bullet points.
-- Keep the language encouraging and simple.
+* Organize clearly by Day (Day 1, Day 2…)
+* For each day include:
+  * 🎯 Goal of the day
+  * 📚 Topics to study
+  * ✅ 2–3 actionable tasks
+  * ⏱ Estimated time (optional)
+* Keep it realistic and achievable
+* Use simple, motivating language
+* Format using clean markdown
 
 Notes:
 {selected_context}
@@ -246,6 +289,7 @@ Revision Plan:
 """
     return _generate(model_name, prompt, temperature=DEFAULT_TEMPERATURE)
 
+@st.cache_data(show_spinner=False)
 def generate_revision_notes(
     context: str,
     weak_topics: List[str],
