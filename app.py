@@ -67,15 +67,36 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+import json
+
+DATA_FILE = "user_data.json"
+
+def load_user_data():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_user_data(data):
+    try:
+        with open(DATA_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
 def ensure_state():
+    user_data = load_user_data()
     defaults = {
         "context_text": "",
         "source_name": "",
         "quiz_items": [],
         "exam_items": [],
-        "weak_topics": [],
-        "quiz_result": None,
-        "exam_result": None,
+        "weak_topics": user_data.get("weak_topics", []),
+        "quiz_result": user_data.get("quiz_result", None),
+        "exam_result": user_data.get("exam_result", None),
         "summary_text": "",
         "revision_text": "",
         "revision_plan": "",
@@ -85,6 +106,14 @@ def ensure_state():
             st.session_state[key] = value
 
 ensure_state()
+
+def update_user_data():
+    data = {
+        "weak_topics": st.session_state.weak_topics,
+        "quiz_result": st.session_state.quiz_result,
+        "exam_result": st.session_state.exam_result,
+    }
+    save_user_data(data)
 
 if not validate_api_key():
     st.error("🚨 Google API key is missing or invalid. Please add a valid `GOOGLE_API_KEY` to your `.env` file.")
@@ -115,7 +144,6 @@ with st.sidebar:
     model_name = st.text_input("Model name", value=os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash"))
     quiz_count = st.slider("Quiz questions", 3, 10, 5)
     exam_count = st.slider("Exam questions", 5, 15, 8)
-    retrieval_method = st.selectbox("Retrieval method", ["Keyword overlap", "Embedding (experimental)"])
     st.divider()
     beginner_mode = st.toggle("Explain Like I'm 10 Mode", value=False, help="Simplify explanations and examples")
     st.divider()
@@ -149,7 +177,15 @@ context = st.session_state.context_text.strip()
 is_ready = bool(context)
 
 if not is_ready:
-    st.info("Upload a PDF or paste notes to start.")
+    st.markdown("""
+    <div class="result-card" style="text-align: center;">
+        <h2>📄 Upload your notes to get started</h2>
+        <p class="muted">You can:</p>
+        <p>• Ask questions 🔍</p>
+        <p>• Generate quizzes 📝</p>
+        <p>• Track weak areas 🧠</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -189,12 +225,16 @@ with col3:
 tabs = st.tabs(["🔍 Ask", "📝 Quiz", "🎓 Exam Mode", "🧠 Weak Areas", "📄 Summary"])
 
 def record_weak_topics(items, selected_answers):
+    updated = False
     for item, selected in zip(items, selected_answers):
         correct = item.get("answer_index")
         topic = item.get("topic", "General")
         if correct is not None and selected != correct:
             if topic and topic not in st.session_state.weak_topics:
                 st.session_state.weak_topics.append(topic)
+                updated = True
+    if updated:
+        update_user_data()
 
 
 with tabs[0]:
@@ -207,7 +247,7 @@ with tabs[0]:
         if not question.strip():
             st.warning("Type a question first.")
         else:
-            with st.spinner("Thinking..."):
+            with st.spinner("🧠 Analyzing your notes..."):
                 try:
                     answer = answer_question(context, question, model_name=model_name, beginner_mode=beginner_mode)
                     st.markdown(f"<div class='result-card'>\n\n{answer}\n\n</div>", unsafe_allow_html=True)
@@ -228,7 +268,7 @@ with tabs[1]:
         st.info("Upload a PDF to generate a quiz.")
 
     if st.button("Generate quiz", type="primary", disabled=not is_ready):
-        with st.spinner("Creating quiz..."):
+        with st.spinner("📚 Creating quiz questions..."):
             try:
                 st.session_state.quiz_items = generate_quiz(
                     context=context,
@@ -275,16 +315,46 @@ with tabs[1]:
                 "wrong_items": wrong_items,
                 "submitted_at": datetime.now().isoformat(timespec="seconds"),
             }
+            update_user_data()
+
+    if st.button("🔄 Regenerate quiz", disabled=not is_ready, key="regen_quiz"):
+        with st.spinner("📚 Creating quiz questions..."):
+            try:
+                generate_quiz.clear()
+                st.session_state.quiz_items = generate_quiz(
+                    context=context,
+                    num_questions=quiz_count,
+                    model_name=model_name,
+                    exam_mode=False,
+                )
+                st.session_state.quiz_result = None
+            except Exception as exc:
+                with st.expander("❌ Error details", expanded=True):
+                    st.error(str(exc))
+                    st.caption("Try using a shorter question or check your API key.")
 
     if st.session_state.quiz_result:
         result = st.session_state.quiz_result
+        score_percent = int((result['score'] / result['total']) * 100) if result['total'] > 0 else 0
+        weak_topic_counts = {}
+        for item in result.get('wrong_items', []):
+            topic = item.get('topic', 'General')
+            weak_topic_counts[topic] = weak_topic_counts.get(topic, 0) + 1
+
+        weak_topic_html = ""
+        if weak_topic_counts:
+            weak_topic_html = "<h4>You are weak in:</h4><ul>"
+            for topic, count in weak_topic_counts.items():
+                weak_topic_html += f"<li>⚠️ {topic} ({count} mistakes)</li>"
+            weak_topic_html += "</ul>"
 
         st.markdown(f"""
         <div class="result-card">
-            <h3 style="margin-top:0;">Quiz Results</h3>
-            <p style="font-size:1.2rem; font-weight:bold; color:{'#2e7d32' if result['score'] > result['total']/2 else '#c62828'}">
-                Score: {result['score']} / {result['total']}
+            <h3 style="margin-top:0;">Performance Dashboard</h3>
+            <p style="font-size:1.2rem; font-weight:bold; color:{'#2e7d32' if score_percent >= 50 else '#c62828'}">
+                Score: {result['score']} / {result['total']} ({score_percent}%)
             </p>
+            {weak_topic_html}
         </div>
         """, unsafe_allow_html=True)
 
@@ -312,7 +382,7 @@ with tabs[2]:
         st.info("Upload a PDF to practice Exam Mode.")
 
     if st.button("Generate exam", type="primary", disabled=not is_ready):
-        with st.spinner("Creating exam..."):
+        with st.spinner("🎓 Generating exam..."):
             try:
                 st.session_state.exam_items = generate_quiz(
                     context=context,
@@ -359,16 +429,46 @@ with tabs[2]:
                 "wrong_items": wrong_items,
                 "submitted_at": datetime.now().isoformat(timespec="seconds"),
             }
+            update_user_data()
+
+    if st.button("🔄 Regenerate exam", disabled=not is_ready, key="regen_exam"):
+        with st.spinner("🎓 Generating exam..."):
+            try:
+                generate_quiz.clear()
+                st.session_state.exam_items = generate_quiz(
+                    context=context,
+                    num_questions=exam_count,
+                    model_name=model_name,
+                    exam_mode=True,
+                )
+                st.session_state.exam_result = None
+            except Exception as exc:
+                with st.expander("❌ Error details", expanded=True):
+                    st.error(str(exc))
+                    st.caption("Try using a shorter question or check your API key.")
 
     if st.session_state.exam_result:
         result = st.session_state.exam_result
+        score_percent = int((result['score'] / result['total']) * 100) if result['total'] > 0 else 0
+        weak_topic_counts = {}
+        for item in result.get('wrong_items', []):
+            topic = item.get('topic', 'General')
+            weak_topic_counts[topic] = weak_topic_counts.get(topic, 0) + 1
+
+        weak_topic_html = ""
+        if weak_topic_counts:
+            weak_topic_html = "<h4>You are weak in:</h4><ul>"
+            for topic, count in weak_topic_counts.items():
+                weak_topic_html += f"<li>⚠️ {topic} ({count} mistakes)</li>"
+            weak_topic_html += "</ul>"
 
         st.markdown(f"""
         <div class="result-card">
-            <h3 style="margin-top:0;">Exam Results</h3>
-            <p style="font-size:1.2rem; font-weight:bold; color:{'#2e7d32' if result['score'] > result['total']/2 else '#c62828'}">
-                Score: {result['score']} / {result['total']}
+            <h3 style="margin-top:0;">Performance Dashboard</h3>
+            <p style="font-size:1.2rem; font-weight:bold; color:{'#2e7d32' if score_percent >= 50 else '#c62828'}">
+                Score: {result['score']} / {result['total']} ({score_percent}%)
             </p>
+            {weak_topic_html}
         </div>
         """, unsafe_allow_html=True)
 
@@ -399,17 +499,32 @@ with tabs[3]:
     else:
         st.info("Your weak topics will appear here after you submit a quiz or exam.")
 
-    if st.button("Generate Smart Revision Plan", type="primary", disabled=not is_ready or not st.session_state.weak_topics):
-        with st.spinner("Building a structured 3-5 day revision plan..."):
-            try:
-                st.session_state.revision_plan = generate_revision_plan(
-                    context=context,
-                    weak_topics=st.session_state.weak_topics,
-                    model_name=model_name,
-                )
-            except Exception as exc:
-                with st.expander("❌ Error details", expanded=True):
-                    st.error(str(exc))
+    col_rp1, col_rp2 = st.columns([1, 1])
+    with col_rp1:
+        if st.button("Generate Smart Revision Plan", type="primary", disabled=not is_ready or not st.session_state.weak_topics):
+            with st.spinner("⚡ Generating insights..."):
+                try:
+                    st.session_state.revision_plan = generate_revision_plan(
+                        context=context,
+                        weak_topics=st.session_state.weak_topics,
+                        model_name=model_name,
+                    )
+                except Exception as exc:
+                    with st.expander("❌ Error details", expanded=True):
+                        st.error(str(exc))
+    with col_rp2:
+        if st.button("🔄 Regenerate Plan", disabled=not is_ready or not st.session_state.weak_topics):
+            with st.spinner("⚡ Generating insights..."):
+                try:
+                    generate_revision_plan.clear()
+                    st.session_state.revision_plan = generate_revision_plan(
+                        context=context,
+                        weak_topics=st.session_state.weak_topics,
+                        model_name=model_name,
+                    )
+                except Exception as exc:
+                    with st.expander("❌ Error details", expanded=True):
+                        st.error(str(exc))
 
     if st.session_state.revision_plan:
         st.markdown(f"<div class='result-card'>\n\n{st.session_state.revision_plan}\n\n</div>", unsafe_allow_html=True)
@@ -419,7 +534,7 @@ with tabs[3]:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Generate quick revision notes", disabled=not is_ready):
-            with st.spinner("Building revision notes..."):
+            with st.spinner("⚡ Generating insights..."):
                 try:
                     st.session_state.revision_text = generate_revision_notes(
                         context=context,
@@ -439,26 +554,42 @@ with tabs[3]:
         if st.button("📇 Create flashcards", disabled=not is_ready):
             with st.spinner("Generating flashcards..."):
                 try:
-                    flashcards = generate_flashcards(context, st.session_state.weak_topics, model_name)
-                    if not flashcards:
+                    generate_flashcards.clear()
+                    st.session_state.flashcards = generate_flashcards(context, st.session_state.weak_topics, model_name)
+                    if not st.session_state.flashcards:
                         st.warning("Could not generate flashcards.")
-                    for card in flashcards:
-                        with st.expander(f"📌 {card.get('front', 'Flashcard')}"):
-                            st.write(card.get('back', ''))
                 except Exception as exc:
                     with st.expander("❌ Error details", expanded=True):
                         st.error(str(exc))
                         st.caption("Try using a shorter question or check your API key.")
+
+        if hasattr(st.session_state, 'flashcards') and st.session_state.flashcards:
+            for i, card in enumerate(st.session_state.flashcards):
+                st.markdown(f"**📌 {card.get('front', 'Flashcard')}**")
+                if st.checkbox("Click to reveal answer", key=f"flashcard_{i}"):
+                    st.markdown(f"<div style='padding: 10px; border-left: 3px solid #ff73a3; margin-left: 10px; background: rgba(255,115,163,0.05); border-radius: 5px;'>{card.get('back', '')}</div>", unsafe_allow_html=True)
+                st.divider()
 
 with tabs[4]:
     st.markdown("<div class='section-header'>Quick summary</div>", unsafe_allow_html=True)
     if not is_ready:
         st.info("Upload a PDF to view a quick summary.")
 
-    if not st.session_state.summary_text:
+    col_sum1, col_sum2 = st.columns([1, 1])
+    with col_sum1:
         if st.button("Summarize notes", type="primary", disabled=not is_ready):
-            with st.spinner("Summarizing..."):
+            with st.spinner("⚡ Generating insights..."):
                 try:
+                    st.session_state.summary_text = summarize_notes(context, model_name=model_name)
+                except Exception as exc:
+                    with st.expander("❌ Error details", expanded=True):
+                        st.error(str(exc))
+                        st.caption("Try using a shorter question or check your API key.")
+    with col_sum2:
+        if st.button("🔄 Regenerate summary", disabled=not is_ready):
+            with st.spinner("⚡ Generating insights..."):
+                try:
+                    summarize_notes.clear()
                     st.session_state.summary_text = summarize_notes(context, model_name=model_name)
                 except Exception as exc:
                     with st.expander("❌ Error details", expanded=True):
@@ -468,4 +599,4 @@ with tabs[4]:
         st.write(st.session_state.summary_text)
 
 st.divider()
-st.caption("Built for GenAI Academy project submission.")
+st.markdown("<div style='text-align: center;' class='muted'>🚀 Built with Google Gemini | GenAI Academy 2026 Project</div>", unsafe_allow_html=True)
