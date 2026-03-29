@@ -145,7 +145,7 @@ with st.sidebar:
         height=220,
         placeholder="Paste your notes here if you do not have a PDF...",
     )
-    model_name = st.text_input("Model name", value=os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash"))
+    model_name = st.text_input("Model name", value=os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash"))
     quiz_count = st.slider("Quiz questions", 3, 10, 5)
     exam_count = st.slider("Exam questions", 5, 15, 8)
     st.divider()
