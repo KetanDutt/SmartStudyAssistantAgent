@@ -43,9 +43,10 @@ def validate_api_key() -> bool:
         return False
 
 import streamlit as st
+from typing import List
 
-@st.cache_data(ttl=3600)
-def get_available_models() -> list:
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_available_models() -> List[str]:
     """Returns a list of available model names that support generateContent."""
     api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -62,7 +63,7 @@ def get_available_models() -> list:
                 if name.startswith('models/'):
                     name = name[len('models/'):]
                 models.append(name)
-        return models
+        return sorted(models)
     except Exception as e:
         print(f"Failed to fetch models: {e}")
         return []

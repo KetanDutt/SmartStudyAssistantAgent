@@ -1,5 +1,5 @@
 import pytest
-from app.config import validate_api_key
+from app.config import validate_api_key, get_available_models
 
 def test_validate_api_key_when_present(monkeypatch):
     import app.config
@@ -33,3 +33,50 @@ def test_validate_api_key_when_missing(monkeypatch):
     app.config._api_key_valid = None
 
     assert validate_api_key() is False
+
+def test_get_available_models_success(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake_key")
+
+    import google.genai as genai
+    class MockModel:
+        def __init__(self, name, actions):
+            self.name = name
+            self.supported_generation_methods = actions
+
+    class MockModels:
+        def list(self):
+            return iter([
+                MockModel("models/gemini-2.0-flash", ["generateContent"]),
+                MockModel("gemini-1.5-pro", ["generateContent", "embedContent"]),
+                MockModel("models/embedding-001", ["embedContent"])
+            ])
+
+    class MockClient:
+        def __init__(self, api_key=None):
+            self.models = MockModels()
+
+    monkeypatch.setattr(genai, "Client", MockClient)
+
+    # Clear cache since it uses @st.cache_data
+    get_available_models.clear()
+
+    models = get_available_models()
+    assert models == ["gemini-1.5-pro", "gemini-2.0-flash"]
+
+def test_get_available_models_failure(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake_key")
+
+    import google.genai as genai
+    class MockModels:
+        def list(self):
+            raise Exception("API failure")
+
+    class MockClient:
+        def __init__(self, api_key=None):
+            self.models = MockModels()
+
+    monkeypatch.setattr(genai, "Client", MockClient)
+    get_available_models.clear()
+
+    models = get_available_models()
+    assert models == []
