@@ -1,7 +1,7 @@
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
-load_dotenv()
+load_dotenv(find_dotenv(), override=True)
 
 API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
@@ -25,12 +25,13 @@ def validate_api_key() -> bool:
     if _api_key_valid is not None:
         return _api_key_valid
 
-    if not API_KEY:
+    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not api_key:
         _api_key_valid = False
         return False
     try:
         from google import genai
-        client = genai.Client(api_key=API_KEY)
+        client = genai.Client(api_key=api_key)
         client.models.generate_content(
             model=DEFAULT_MODEL,
             contents="test"
@@ -38,5 +39,6 @@ def validate_api_key() -> bool:
         _api_key_valid = True
         return True
     except Exception as e:
+        print(f"API key validation failed: {e}")
         _api_key_valid = False
         return False
