@@ -32,13 +32,37 @@ def validate_api_key() -> bool:
     try:
         from google import genai
         client = genai.Client(api_key=api_key)
-        client.models.generate_content(
-            model=DEFAULT_MODEL,
-            contents="test"
-        )
+        # Validate by listing models instead of calling generate_content
+        # which can fail if the specific model is not found
+        next(client.models.list())
         _api_key_valid = True
         return True
     except Exception as e:
         print(f"API key validation failed: {e}")
         _api_key_valid = False
         return False
+
+import streamlit as st
+
+@st.cache_data(ttl=3600)
+def get_available_models() -> list:
+    """Returns a list of available model names that support generateContent."""
+    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return []
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        models = []
+        for m in client.models.list():
+            actions = getattr(m, 'supported_generation_methods', []) or getattr(m, 'supported_actions', [])
+            if 'generateContent' in actions:
+                # Strip 'models/' prefix if present
+                name = m.name
+                if name.startswith('models/'):
+                    name = name[len('models/'):]
+                models.append(name)
+        return models
+    except Exception as e:
+        print(f"Failed to fetch models: {e}")
+        return []

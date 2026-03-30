@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 import streamlit as st
 
-from app.config import validate_api_key
+from app.config import validate_api_key, get_available_models
 from app.pdf_utils import extract_text_from_pdf
 from app.text_processing import split_notes_for_display
 from app.features import (
@@ -138,7 +138,16 @@ with st.sidebar:
         height=220,
         placeholder="Paste your notes here if you do not have a PDF...",
     )
-    model_name = st.text_input("Model name", value=os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash"))
+
+    # Model selection from available models
+    available_models = get_available_models()
+    default_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+    if available_models:
+        default_index = available_models.index(default_model_env) if default_model_env in available_models else 0
+        model_name = st.selectbox("Model name", options=available_models, index=default_index)
+    else:
+        model_name = st.text_input("Model name", value=default_model_env)
+
     quiz_count = st.slider("Quiz questions", 3, 10, 5)
     exam_count = st.slider("Exam questions", 5, 15, 8)
     st.divider()

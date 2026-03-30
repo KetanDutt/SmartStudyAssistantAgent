@@ -6,11 +6,16 @@ def test_validate_api_key_when_present(monkeypatch):
     app.config.API_KEY = "fake_key"
     app.config._api_key_valid = None
 
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake_key")
+
     # Mock the API call since the key is fake
     import google.genai as genai
+    class MockModel:
+        def __init__(self, name):
+            self.name = name
     class MockModels:
-        def generate_content(self, model, contents):
-            return True
+        def list(self):
+            return iter([MockModel("models/gemini-2.5-flash")])
     class MockClient:
         def __init__(self, api_key=None):
             self.models = MockModels()
