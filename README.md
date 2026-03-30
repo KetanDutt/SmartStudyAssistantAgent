@@ -5,6 +5,7 @@ A beginner-friendly Streamlit app for the GenAI Academy project submission.
 ## Features
 
 - **File Upload:** Upload a PDF or paste notes to get started
+- **Dynamic Model Selection:** Choose from a dynamically generated list of available Gemini text-to-text models
 - **Q&A System:** Ask questions about the study material, featuring a simple explanation "Explain Like I'm 10" mode and confidence scores
 - **Quizzes:** Generate MCQ quizzes with instant feedback
 - **Exam Mode:** Practice exam mode where answers stay hidden until submission
@@ -35,38 +36,64 @@ A beginner-friendly Streamlit app for the GenAI Academy project submission.
 
 ## Local setup
 
-```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-Create a `.env` file in the project root:
+Create a `.env` file in the project root based on `.env.example`:
 
 ```env
 GOOGLE_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL_NAME=gemini-2.5-flash
 ```
 
-Run the app:
+We provide convenient scripts to automatically setup your environment, install dependencies, and run the app.
+
+**Windows:**
+```cmd
+run_local.bat
+```
+
+**macOS / Linux:**
+```bash
+./run_local.sh
+```
+
+Alternatively, you can manually set it up:
 
 ```bash
+python -m venv venv
+source venv/bin/activate  # macOS/Linux
+venv\Scripts\activate     # Windows
+pip install -r requirements.txt
 streamlit run app.py
 ```
 
 ## Cloud Run deployment
 
-Build and deploy from the project folder:
+We provide deployment scripts that automatically read your `GOOGLE_API_KEY` and `GEMINI_MODEL_NAME` from your `.env` file and deploy the app to Google Cloud Run.
 
+Make sure you are authenticated with `gcloud` and have selected your project:
 ```bash
 gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
+```
 
-gcloud run deploy study-agent   --source .   --region us-central1   --allow-unauthenticated   --set-env-vars GOOGLE_API_KEY=YOUR_GEMINI_API_KEY,GEMINI_MODEL_NAME=gemini-2.5-flash
+Then simply run the deployment script for your platform.
+
+**Windows:**
+```cmd
+deploy_gcp.bat
+```
+
+**macOS / Linux:**
+```bash
+./deploy_gcp.sh
+```
+
+Alternatively, you can deploy manually:
+```bash
+gcloud run deploy smart-study-agent \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars GOOGLE_API_KEY=YOUR_GEMINI_API_KEY,GEMINI_MODEL_NAME=gemini-2.5-flash
 ```
 
 ## Notes

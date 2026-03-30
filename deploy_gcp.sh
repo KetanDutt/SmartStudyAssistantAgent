@@ -21,7 +21,11 @@ if [ ! -f ".env" ]; then
     return 1 2>/dev/null || exit 1
 fi
 
-export $(grep -v '^#' .env | xargs)
+while IFS='=' read -r key value; do
+    if [[ ! $key =~ ^# && -n $key ]]; then
+        export "$key=$value"
+    fi
+done < .env
 
 if [ -z "$GOOGLE_API_KEY" ]; then
     echo "[ERROR] GOOGLE_API_KEY is not set in .env."
