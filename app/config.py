@@ -58,10 +58,20 @@ def get_available_models() -> List[str]:
         for m in client.models.list():
             actions = getattr(m, 'supported_generation_methods', []) or getattr(m, 'supported_actions', [])
             if 'generateContent' in actions:
-                # Strip 'models/' prefix if present
                 name = m.name
                 if name.startswith('models/'):
                     name = name[len('models/'):]
+
+                # Filter out models that are not suitable for general text-to-text generation
+                # Embeddings, vision-only, and specialized models (like AQA) usually aren't what the user wants.
+                name_lower = name.lower()
+                exclusions = [
+                    'embedding', 'aqa', 'vision', 'tts', 'image', 'clip',
+                    'robotics', 'computer-use', 'lyria', 'nano-banana'
+                ]
+                if any(ex in name_lower for ex in exclusions):
+                    continue
+
                 models.append(name)
         return sorted(models)
     except Exception as e:
