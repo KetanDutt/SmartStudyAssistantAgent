@@ -94,6 +94,9 @@ st.markdown(
     hr {
         margin: 0px !important;
     }
+    header[data-testid="stHeader"] {
+        display: none;
+    }
     </style>
     """,
     unsafe_allow_html=True,
