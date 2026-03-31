@@ -34,7 +34,7 @@ if "%GOOGLE_API_KEY%"=="" (
 )
 
 if "%GEMINI_MODEL_NAME%"=="" (
-    set GEMINI_MODEL_NAME=gemini-2.5-flash
+    set GEMINI_MODEL_NAME=gemini-2.5-flash-lite
 )
 
 :: Deploy to Cloud Run

@@ -32,7 +32,7 @@ if [ -z "$GOOGLE_API_KEY" ]; then
     return 1 2>/dev/null || exit 1
 fi
 
-MODEL_NAME=${GEMINI_MODEL_NAME:-"gemini-2.5-flash"}
+MODEL_NAME=${GEMINI_MODEL_NAME:-"gemini-2.5-flash-lite"}
 
 # Deploy to Cloud Run
 echo "[INFO] Deploying to Google Cloud Run with model $MODEL_NAME..."

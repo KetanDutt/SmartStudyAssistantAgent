@@ -141,7 +141,7 @@ with st.sidebar:
 
     # Model selection from available models
     available_models = get_available_models()
-    default_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+    default_model_env = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-lite")
     if available_models:
         default_index = available_models.index(default_model_env) if default_model_env in available_models else 0
         model_name = st.selectbox("Model name", options=available_models, index=default_index)
