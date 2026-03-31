@@ -40,7 +40,7 @@ Create a `.env` file in the project root based on `.env.example`:
 
 ```env
 GOOGLE_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL_NAME=gemini-2.5-flash
+GEMINI_MODEL_NAME=gemini-2.5-flash-lite
 ```
 
 We provide convenient scripts to automatically setup your environment, install dependencies, and run the app.
@@ -99,7 +99,7 @@ gcloud run deploy smart-study-agent \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars GOOGLE_API_KEY=YOUR_GEMINI_API_KEY,GEMINI_MODEL_NAME=gemini-2.5-flash
+  --set-env-vars GOOGLE_API_KEY=YOUR_GEMINI_API_KEY,GEMINI_MODEL_NAME=gemini-2.5-flash-lite
 ```
 
 ## Notes

@@ -4,7 +4,7 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(), override=True)
 
 API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-lite")
 
 MAX_CONTEXT_WORDS_QA = 2600
 MAX_CONTEXT_WORDS_SUMMARY = 3000
