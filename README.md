@@ -46,11 +46,13 @@ GEMINI_MODEL_NAME=gemini-2.5-flash-lite
 We provide convenient scripts to automatically setup your environment, install dependencies, and run the app.
 
 **Windows:**
+
 ```cmd
 run_local.bat
 ```
 
 **macOS / Linux:**
+
 ```bash
 ./run_local.sh
 ```
@@ -70,6 +72,7 @@ streamlit run app.py
 We provide deployment scripts that automatically read your `GOOGLE_API_KEY` and `GEMINI_MODEL_NAME` from your `.env` file and deploy the app to Google Cloud Run.
 
 Make sure you are authenticated with `gcloud` and have selected your project:
+
 ```bash
 gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
@@ -78,16 +81,19 @@ gcloud config set project YOUR_PROJECT_ID
 Then simply run the deployment script for your platform.
 
 **Windows:**
+
 ```cmd
 deploy_gcp.bat
 ```
 
 **macOS / Linux:**
+
 ```bash
 ./deploy_gcp.sh
 ```
 
 Alternatively, you can deploy manually:
+
 ```bash
 gcloud run deploy smart-study-agent \
   --source . \
