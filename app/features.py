@@ -184,7 +184,12 @@ Notes:
         if answer_index not in (0, 1, 2, 3):
             answer_index = 0
 
-        clean_options = [str(opt).strip() for opt in options[:4]]
+        clean_options = [
+            str(options[0]).strip(),
+            str(options[1]).strip(),
+            str(options[2]).strip(),
+            str(options[3]).strip(),
+        ]
 
         normalized.append(
             {
