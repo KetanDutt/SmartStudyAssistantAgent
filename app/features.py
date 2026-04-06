@@ -1,4 +1,5 @@
 from typing import Any, Dict, List
+import streamlit as st
 from app.config import (
     DEFAULT_MODEL,
     MAX_CONTEXT_WORDS_QA,
@@ -44,8 +45,6 @@ def select_context_for_generation(text: str, max_words: int = 3200) -> str:
     context = "\n\n".join(chosen)
     return " ".join(context.split()[:max_words])
 
-
-import streamlit as st
 
 @st.cache_data(show_spinner=False)
 def answer_question(context: str, question: str, model_name: str = DEFAULT_MODEL, beginner_mode: bool = False) -> str:
