@@ -102,7 +102,7 @@ Requirements:
   * Key terms in **bold**
 * Use bullet points
 * Keep it concise and revision-friendly
-* Highlight any weak topics or related concepts in red using standard markdown or HTML `<span style="color:red"></span>`
+* Highlight any weak topics or related concepts in red using Streamlit's markdown syntax: :red[text]
 
 Notes:
 {selected_context}
@@ -303,7 +303,7 @@ Use the study notes below to produce:
 - one short revision checklist
 
 Keep it beginner-friendly and concise.
-Highlight any weak topics or related concepts in red using HTML `<span style="color:red"></span>`.
+Highlight any weak topics or related concepts in red using Streamlit's markdown syntax: :red[text].
 
 Notes:
 {selected_context}

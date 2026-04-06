@@ -1,4 +1,5 @@
 import os
+import html
 from datetime import datetime
 import streamlit as st
 
@@ -224,7 +225,7 @@ with col1:
         f"""
         <div class="mini-card">
             <div class="muted">Source</div>
-            <div><strong>{st.session_state.source_name or "Loaded content"}</strong></div>
+            <div><strong>{html.escape(st.session_state.source_name or "Loaded content")}</strong></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -268,7 +269,7 @@ with tabs[0]:
             with st.spinner("🧠 Analyzing your notes..."):
                 try:
                     answer = answer_question(context, question, model_name=model_name, beginner_mode=beginner_mode)
-                    st.markdown(f"<div class='result-card'>\n\n{answer}\n\n</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='result-card'>\n\n{html.escape(answer)}\n\n</div>", unsafe_allow_html=True)
                 except Exception as exc:
                     with st.expander("❌ Error details", expanded=True):
                         st.error(str(exc))
@@ -369,7 +370,7 @@ with tabs[1]:
         if weak_topic_counts:
             weak_topic_html = "<h4>You are weak in:</h4><ul>"
             for topic, count in weak_topic_counts.items():
-                weak_topic_html += f"<li>⚠️ {topic} ({count} mistakes)</li>"
+                weak_topic_html += f"<li>⚠️ {html.escape(topic)} ({count} mistakes)</li>"
             weak_topic_html += "</ul>"
 
         st.markdown(f"""
@@ -489,7 +490,7 @@ with tabs[2]:
         if weak_topic_counts:
             weak_topic_html = "<h4>You are weak in:</h4><ul>"
             for topic, count in weak_topic_counts.items():
-                weak_topic_html += f"<li>⚠️ {topic} ({count} mistakes)</li>"
+                weak_topic_html += f"<li>⚠️ {html.escape(topic)} ({count} mistakes)</li>"
             weak_topic_html += "</ul>"
 
         st.markdown(f"""
@@ -564,7 +565,7 @@ with tabs[3]:
                         st.error(str(exc))
 
     if st.session_state.revision_plan:
-        st.markdown(f"<div class='result-card'>\n\n{st.session_state.revision_plan}\n\n</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='result-card'>\n\n{html.escape(st.session_state.revision_plan)}\n\n</div>", unsafe_allow_html=True)
         st.download_button(
             "📥 Download Revision Plan",
             st.session_state.revision_plan,
@@ -591,7 +592,7 @@ with tabs[3]:
 
         if st.session_state.revision_text:
             st.markdown("#### Revision notes")
-            st.markdown(f"<div class='mini-card'>\n\n{st.session_state.revision_text}\n\n</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='mini-card'>\n\n{html.escape(st.session_state.revision_text)}\n\n</div>", unsafe_allow_html=True)
             st.download_button(
                 "📥 Download Revision Notes",
                 st.session_state.revision_text,
@@ -616,7 +617,7 @@ with tabs[3]:
             for i, card in enumerate(st.session_state.flashcards):
                 st.markdown(f"**📌 {card.get('front', 'Flashcard')}**")
                 if st.checkbox("Click to reveal answer", key=f"flashcard_{i}"):
-                    st.markdown(f"<div style='padding: 10px; border-left: 3px solid var(--primary-color); margin-left: 10px; background: var(--secondary-background-color); border-radius: 5px; color: var(--text-color);'>{card.get('back', '')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding: 10px; border-left: 3px solid var(--primary-color); margin-left: 10px; background: var(--secondary-background-color); border-radius: 5px; color: var(--text-color);'>{html.escape(card.get('back', ''))}</div>", unsafe_allow_html=True)
                 st.divider()
 
             flashcards_json = json.dumps(st.session_state.flashcards, indent=2)
