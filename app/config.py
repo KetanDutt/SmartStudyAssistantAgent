@@ -1,4 +1,6 @@
 import os
+from typing import List
+import streamlit as st
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv(), override=True)
@@ -41,9 +43,6 @@ def validate_api_key() -> bool:
         print(f"API key validation failed: {e}")
         _api_key_valid = False
         return False
-
-import streamlit as st
-from typing import List
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_available_models() -> List[str]:
