@@ -70,5 +70,25 @@ def rank_chunks(query: str, chunks: List[str], top_k: int = 4) -> List[str]:
     return selected
 
 def split_notes_for_display(text: str, max_chars: int = 3500) -> str:
+    """
+    Cleans text and truncates it to approximately max_chars.
+    Attempts to truncate at the last word boundary within the limit.
+    Ensures the total length (including ellipsis) does not exceed max_chars.
+    """
     text = clean_text(text)
-    return text[:max_chars] + ("\n\n..." if len(text) > max_chars else "")
+    if len(text) <= max_chars:
+        return text
+
+    ellipsis = "\n\n..."
+    limit = max_chars - len(ellipsis)
+    if limit <= 0:
+        return text[:max_chars]
+
+    # Find the last space before the limit to avoid cutting words
+    truncated = text[:limit]
+    last_space = truncated.rfind(" ")
+
+    if last_space != -1:
+        truncated = truncated[:last_space]
+
+    return truncated + ellipsis
