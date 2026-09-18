@@ -1,11 +1,15 @@
+"""
+Configuration module for the Smart Study Assistant Agent.
+Handles environment variables, API key resolution, and model retrieval.
+"""
+
 import os
-from typing import List
+from typing import List, Optional
 import streamlit as st
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 load_dotenv(find_dotenv(), override=True)
 
-API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-lite")
 
 MAX_CONTEXT_WORDS_QA = 2600
@@ -14,59 +18,90 @@ MAX_CONTEXT_WORDS_QUIZ = 2000
 DEFAULT_TEMPERATURE = 0.2
 QUIZ_TEMPERATURE = 0.3
 
-def require_api_key() -> None:
-    if not API_KEY:
+
+def get_api_key() -> Optional[str]:
+    """Retrieve API key from session state, environment, or Streamlit secrets."""
+    # Check session state first (user-entered key via UI)
+    if "user_api_key" in st.session_state and st.session_state.user_api_key:
+        return st.session_state.user_api_key.strip()
+
+    # Check environment variables
+    env_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if env_key:
+        return env_key.strip()
+
+    # Check Streamlit secrets if present
+    try:
+        if "GOOGLE_API_KEY" in st.secrets:
+            return st.secrets["GOOGLE_API_KEY"]
+        if "GEMINI_API_KEY" in st.secrets:
+            return st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        pass
+
+    return None
+
+
+def require_api_key() -> str:
+    """Ensure an API key is present or raise RuntimeError."""
+    key = get_api_key()
+    if not key:
         raise RuntimeError(
-            "Missing GOOGLE_API_KEY. Add it to your .env file or set it as an environment variable."
+            "Missing GOOGLE_API_KEY. Add it to your .env file, "
+            "set it in the sidebar, or configure an environment variable."
         )
+    return key
 
-_api_key_valid = None
 
-def validate_api_key() -> bool:
-    global _api_key_valid
-    if _api_key_valid is not None:
-        return _api_key_valid
-
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        _api_key_valid = False
+def validate_api_key(api_key: Optional[str] = None) -> bool:
+    """Validate whether an API key is provided and functional."""
+    key = api_key or get_api_key()
+    if not key:
         return False
     try:
         from google import genai
-        client = genai.Client(api_key=api_key)
-        # Validate by listing models instead of calling generate_content
-        # which can fail if the specific model is not found
+
+        client = genai.Client(api_key=key)
+        # Test by fetching the first model item
         next(client.models.list())
-        _api_key_valid = True
         return True
     except Exception as e:
         print(f"API key validation failed: {e}")
-        _api_key_valid = False
         return False
 
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_available_models() -> List[str]:
-    """Returns a list of available model names that support generateContent."""
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not api_key:
+def get_available_models(api_key: Optional[str] = None) -> List[str]:
+    """Return a list of available Gemini text models supporting generateContent."""
+    key = api_key or get_api_key()
+    if not key:
         return []
     try:
         from google import genai
-        client = genai.Client(api_key=api_key)
+
+        client = genai.Client(api_key=key)
         models = []
         for m in client.models.list():
-            actions = getattr(m, 'supported_generation_methods', []) or getattr(m, 'supported_actions', [])
-            if 'generateContent' in actions:
+            actions = getattr(m, "supported_generation_methods", []) or getattr(
+                m, "supported_actions", []
+            )
+            if "generateContent" in actions:
                 name = m.name
-                if name.startswith('models/'):
-                    name = name[len('models/'):]
+                if name.startswith("models/"):
+                    name = name[len("models/") :]
 
-                # Filter out models that are not suitable for general text-to-text generation
-                # Embeddings, vision-only, and specialized models (like AQA) usually aren't what the user wants.
                 name_lower = name.lower()
                 exclusions = [
-                    'embedding', 'aqa', 'vision', 'tts', 'image', 'clip',
-                    'robotics', 'computer-use', 'lyria', 'nano-banana'
+                    "embedding",
+                    "aqa",
+                    "vision",
+                    "tts",
+                    "image",
+                    "clip",
+                    "robotics",
+                    "computer-use",
+                    "lyria",
+                    "nano-banana",
                 ]
                 if any(ex in name_lower for ex in exclusions):
                     continue

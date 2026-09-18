@@ -1,66 +1,179 @@
-import re
-import hashlib
+"""
+Text processing and retrieval utilities.
+Includes text cleaning, smart chunking with overlap, tokenization,
+BM25-style keyword search and ranking, and formatting.
+"""
+
 from functools import lru_cache
+import hashlib
+import re
 from typing import List
 
 STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "been", "but", "by", "can",
-    "could", "did", "do", "does", "doing", "for", "from", "had", "has", "have",
-    "he", "her", "hers", "him", "his", "how", "i", "if", "in", "into", "is",
-    "it", "its", "just", "me", "more", "most", "my", "no", "not", "of", "on",
-    "or", "our", "out", "over", "she", "so", "some", "than", "that", "the",
-    "their", "them", "then", "there", "these", "they", "this", "to", "too",
-    "us", "was", "we", "were", "what", "when", "where", "which", "who",
-    "why", "with", "would", "you", "your"
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "been",
+    "but",
+    "by",
+    "can",
+    "could",
+    "did",
+    "do",
+    "does",
+    "doing",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "he",
+    "her",
+    "hers",
+    "him",
+    "his",
+    "how",
+    "i",
+    "if",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "just",
+    "me",
+    "more",
+    "most",
+    "my",
+    "no",
+    "not",
+    "of",
+    "on",
+    "or",
+    "our",
+    "out",
+    "over",
+    "she",
+    "so",
+    "some",
+    "than",
+    "that",
+    "the",
+    "their",
+    "them",
+    "then",
+    "there",
+    "these",
+    "they",
+    "this",
+    "to",
+    "too",
+    "us",
+    "was",
+    "we",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "with",
+    "would",
+    "you",
+    "your",
 }
 
+
 def clean_text(text: str) -> str:
-    text = re.sub(r"\r", "\n", text)
+    """Normalize line endings and redundant whitespace."""
+    if not text:
+        return ""
+    text = re.sub(r"\r\n?", "\n", text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
-@lru_cache(maxsize=4)
-def chunk_text_cached(text_hash: str, text: str, max_words: int = 900) -> List[str]:
+
+@lru_cache(maxsize=32)
+def chunk_text_cached(
+    text_hash: str, text: str, max_words: int = 800, overlap: int = 100
+) -> List[str]:
+    """Split text into overlapping chunks of words with lru_cache."""
     words = text.split()
     if not words:
         return []
+    if len(words) <= max_words:
+        return [" ".join(words)]
+
     chunks = []
-    for start in range(0, len(words), max_words):
-        chunk = " ".join(words[start:start + max_words]).strip()
+    step = max(1, max_words - overlap)
+    for start in range(0, len(words), step):
+        chunk_words = words[start : start + max_words]
+        chunk = " ".join(chunk_words).strip()
         if chunk:
             chunks.append(chunk)
+        if start + max_words >= len(words):
+            break
     return chunks
 
-def chunk_text(text: str, max_words: int = 900) -> List[str]:
-    """Helper for chunking to avoid changing existing calls."""
-    return get_chunks(text, max_words)
 
-def get_chunks(text: str, max_words: int = 900) -> List[str]:
-    text_hash = hashlib.md5(text.encode()).hexdigest()
-    return chunk_text_cached(text_hash, text, max_words)
+def chunk_text(text: str, max_words: int = 800, overlap: int = 100) -> List[str]:
+    """Split text into manageable chunks."""
+    return get_chunks(text, max_words, overlap)
 
-@lru_cache(maxsize=128)
+
+def get_chunks(text: str, max_words: int = 800, overlap: int = 100) -> List[str]:
+    """Hash text for cached chunking."""
+    if not text.strip():
+        return []
+    text_hash = hashlib.md5(f"{text}_{max_words}_{overlap}".encode("utf-8")).hexdigest()
+    return chunk_text_cached(text_hash, text, max_words, overlap)
+
+
+@lru_cache(maxsize=256)
 def tokenize(text: str) -> List[str]:
-    return [w.lower() for w in re.findall(r"[A-Za-z0-9]+", text) if w.lower() not in STOPWORDS]
+    """Extract lowercased alphanumeric tokens excluding stopwords."""
+    return [
+        w.lower()
+        for w in re.findall(r"[A-Za-z0-9]+", text)
+        if w.lower() not in STOPWORDS
+    ]
+
 
 def rank_chunks(query: str, chunks: List[str], top_k: int = 4) -> List[str]:
-    """Return the top_k chunks most relevant to the query using keyword overlap."""
+    """
+    Score and rank chunks against query using frequency-weighted token overlap.
+    Returns top_k chunks.
+    """
     if not chunks:
         return []
 
-    query_tokens = set(tokenize(query))
+    query_tokens = tokenize(query)
     if not query_tokens:
         return chunks[:top_k]
 
+    q_set = set(query_tokens)
     scored = []
     for chunk in chunks:
         tokens = tokenize(chunk)
         if not tokens:
-            score = 0
-        else:
-            overlap = len(query_tokens.intersection(tokens))
-            score = overlap / max(1, len(query_tokens))
+            scored.append((0.0, chunk))
+            continue
+
+        token_counts = {}
+        for t in tokens:
+            if t in q_set:
+                token_counts[t] = token_counts.get(t, 0) + 1
+
+        # Score based on unique matched tokens plus term frequency
+        unique_matches = len(token_counts)
+        freq_bonus = sum(min(count, 3) for count in token_counts.values())
+        score = (unique_matches * 2.0 + freq_bonus) / max(1, len(q_set))
         scored.append((score, chunk))
 
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -68,6 +181,7 @@ def rank_chunks(query: str, chunks: List[str], top_k: int = 4) -> List[str]:
     if not selected:
         selected = chunks[:top_k]
     return selected
+
 
 def split_notes_for_display(text: str, max_chars: int = 3500) -> str:
     """
@@ -84,7 +198,6 @@ def split_notes_for_display(text: str, max_chars: int = 3500) -> str:
     if limit <= 0:
         return text[:max_chars]
 
-    # Find the last space before the limit to avoid cutting words
     truncated = text[:limit]
     last_space = truncated.rfind(" ")
 
