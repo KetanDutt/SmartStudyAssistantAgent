@@ -1,102 +1,124 @@
-# Smart Study Assistant Agent
+# 📚 Smart Study Assistant Agent
 
-A beginner-friendly Streamlit app for the GenAI Academy project submission.
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.55.0-FF4B4B.svg)](https://streamlit.io/)
+[![Google Gemini SDK](https://img.shields.io/badge/Google%20GenAI-v1.69.0-4285F4.svg)](https://github.com/google-gemini/generative-ai-python)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Features
+An intelligent, production-ready AI study companion and revision assistant powered by Google Gemini and Streamlit. Designed for students, educators, and lifelong learners to turn course documents, textbooks, and notes into interactive tutoring dialogues, adaptive MCQ quizzes, active recall flashcard decks, and structured revision plans.
 
-- **File Upload:** Upload a PDF or paste notes to get started
-- **Dynamic Model Selection:** Choose from a dynamically generated list of available Gemini text-to-text models
-- **Q&A System:** Ask questions about the study material, featuring a simple explanation "Explain Like I'm 10" mode and confidence scores
-- **Quizzes:** Generate MCQ quizzes with instant feedback
-- **Exam Mode:** Practice exam mode where answers stay hidden until submission
-- **Performance Analytics:** Track weak topics, view color-coded scores, and percentage breakdowns
-- **Smart Revision:** Generate structured 3-5 day revision plans from weak topics
-- **Interactive Flashcards:** Create interactive click-to-reveal flashcards focusing on your weak areas
-- **Quick Summaries:** Generate 5-point summaries of your uploaded materials
-- **Persistent Storage:** Results and weak areas are saved and reload upon page refresh
+---
 
-## Demo Steps
+## 🌟 Key Features
 
-1. Add your Google Gemini API key to `.env`
-2. Run `streamlit run app.py`
-3. Upload a PDF or paste your notes on the sidebar
-4. Ask a question and toggle "Explain Like I'm 10 Mode"
-5. Switch to the Quiz tab and generate a quiz, intentionally getting some wrong
-6. View the new Performance Dashboard and how your weak topics are tracked
-7. Go to the Weak Areas tab to generate a Smart Revision Plan and Flashcards
-8. Test the interactive click-to-reveal on the Flashcards
+- **📄 Document Ingestion:** Upload PDF files or paste lecture notes with automatic cleaning, deduplication, and cached parsing.
+- **💬 Conversational AI Tutor:** Ask questions about your study material with chat history, verified citations from the notes, confidence scores, and an optional **"Explain Like I'm 10"** mode.
+- **📝 Adaptive Practice Quizzes:** Generate randomized MCQs across custom difficulty levels (`Beginner`, `Medium`, `Hard`) with immediate answer explanations and option shuffling.
+- **🎓 Timed Exam Simulation:** Practice in test mode where solutions stay strictly hidden until submission.
+- **🎴 Spaced Recall Flashcards:** Interactive flashcards with click-to-flip functionality prioritizing your detected weak topics, with mastery tracking and JSON export.
+- **🧠 Weak Areas Tracker & Smart Revision:** Automatically captures topics missed in quizzes and exams. Generate custom 3–5 day step-by-step revision timetables and high-yield condensed revision notes.
+- **🗺️ Visual Concept Mindmap:** Generates Mermaid.js hierarchical mindmaps illustrating connections between key ideas.
+- **📄 Executive Summary:** Multi-section study summaries covering core thesis, 5 critical takeaways, and self-check questions.
+- **📈 Analytics & Progress Dashboard:** Track test scores over time with interactive line charts, performance metrics, and CSV export.
+- **🔐 Flexible Credentials:** Support for `.env`, environment variables, Streamlit secrets, or on-the-fly UI input with live API key validation.
 
-## Tech stack
+---
 
-- Python
-- Streamlit
-- Gemini API via `google-generativeai`
-- `python-dotenv`
-- `pypdf`
+## 🚀 Quick Start
 
-## Local setup
+### 1. Clone & Set Up
 
-Create a `.env` file in the project root based on `.env.example`:
+```bash
+git clone https://github.com/KetanDutt/SmartStudyAssistantAgent.git
+cd SmartStudyAssistantAgent
 
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Configure API Key
+
+Create a `.env` file in the root directory:
 ```env
 GOOGLE_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL_NAME=gemini-2.5-flash-lite
 ```
 
-We provide convenient scripts to automatically setup your environment, install dependencies, and run the app.
+*(You can also enter your API key directly in the sidebar during runtime!)*
 
-**Windows:**
-```cmd
-run_local.bat
-```
-
-**macOS / Linux:**
-```bash
-./run_local.sh
-```
-
-Alternatively, you can manually set it up:
+### 3. Launch the Application
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
-venv\Scripts\activate     # Windows
-pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Cloud Run deployment
+Or run our pre-configured startup script:
+- **macOS / Linux:** `./run_local.sh`
+- **Windows:** `run_local.bat`
 
-We provide deployment scripts that automatically read your `GOOGLE_API_KEY` and `GEMINI_MODEL_NAME` from your `.env` file and deploy the app to Google Cloud Run.
+---
 
-Make sure you are authenticated with `gcloud` and have selected your project:
+## 📖 Detailed Documentation
+
+Explore comprehensive documentation inside the [`docs/`](docs/) directory:
+
+- [**System Architecture & Technical Design**](docs/ARCHITECTURE.md): Deep dive into the RAG pipeline, chunking logic, and components.
+- [**Feature Guide & User Manual**](docs/FEATURES.md): Step-by-step walkthrough of all study modes and tools.
+- [**Deployment Guide**](docs/DEPLOYMENT.md): Instructions for local execution, Docker containerization, and Google Cloud Run.
+- [**Testing & Quality Assurance**](docs/TESTING.md): Unit testing instructions and linting guidelines.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend & App Framework:** [Streamlit](https://streamlit.io/)
+- **LLM SDK:** Official Google GenAI SDK (`google-genai`)
+- **PDF Extraction:** `pypdf`
+- **Resilience & Caching:** `tenacity`, `streamlit.cache_data`, `lru_cache`
+- **Data Analytics:** `pandas`
+- **Testing & Quality:** `pytest`, `black`, `flake8`
+
+---
+
+## 🧪 Testing & Code Quality
+
+Run tests and style checks:
+
 ```bash
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
+# Run test suite
+pytest
+
+# Code formatting check
+black --check app tests app.py
+
+# Linting
+flake8 --max-line-length=88 --extend-ignore=E203,W503 app tests
 ```
 
-Then simply run the deployment script for your platform.
+---
 
-**Windows:**
-```cmd
-deploy_gcp.bat
-```
+## 🐳 Docker & Cloud Deployment
 
-**macOS / Linux:**
+### Run with Docker
+
 ```bash
-./deploy_gcp.sh
+docker build -t smart-study-agent .
+docker run -p 8080:8080 -e GOOGLE_API_KEY="your_api_key" smart-study-agent
 ```
 
-Alternatively, you can deploy manually:
+### Deploy to Google Cloud Run
+
 ```bash
-gcloud run deploy smart-study-agent \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars GOOGLE_API_KEY=YOUR_GEMINI_API_KEY,GEMINI_MODEL_NAME=gemini-2.5-flash-lite
+./deploy_gcp.sh  # or deploy_gcp.bat on Windows
 ```
 
-## Notes
+---
 
-- Do not commit your `.env` file.
-- For production, consider storing the API key in Secret Manager.
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
